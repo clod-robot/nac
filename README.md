@@ -97,6 +97,11 @@ npm run build    # 构建产物在 dist/
 - Redis + Lua 限流/幂等防爆破；操作全量审计（Kafka → 落库，等保留痕）
 - 密钥/共享密钥均经环境变量注入，无硬编码
 
+## 开源协议
+本项目采用 **GNU AGPL-3.0** 开源协议（见 [LICENSE](./LICENSE)）。
+- 任何人可自由下载、安装、使用，欢迎提交 Issue / Bug / 改进建议。
+- Copyleft：对本项目的修改或基于它的衍生作品，须以相同协议公开源码；即使仅通过网络提供服务（SaaS），也须向用户提供修改后的对应源码。
+
 ## 默认配置（环境变量覆盖）
 `MYSQL_HOST/PORT/DB/USER/PASSWORD`、`REDIS_HOST/PORT`、`KAFKA_SERVERS`、`RADIUS_SHARED_SECRET`、`NAC_INTERNAL_SECRET`、`PHONE_CRYPTO_PASSWORD`。
 
