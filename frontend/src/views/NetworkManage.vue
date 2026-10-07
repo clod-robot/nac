@@ -20,35 +20,30 @@
         <el-table-column label="协商速率" width="110">
           <template #default="{ row }">{{ row.speedMbps ? row.speedMbps + ' Mbps' : '未知' }}</template>
         </el-table-column>
-        <el-table-column label="MTU" prop="mtu" width="70" />
-        <el-table-column label="IPv4 地址" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.ipv4?.address || '-' }}</template>
+        <el-table-column label="mtu" prop="mtu" width="70" />
+        <el-table-column label="ipv4信息" min-width="230">
+          <template #default="{ row }">
+            <div class="net-cell">
+              <div>ipv4地址：{{ row.ipv4?.address || '-' }}</div>
+              <div>掩码：{{ row.ipv4 ? (row.ipv4.mask + ' /' + row.ipv4.prefix) : '-' }}</div>
+              <div>网关：{{ row.gateway || '-' }}</div>
+              <div>主dns：{{ row.dns1 || '-' }}</div>
+              <div>备dns：{{ row.dns2 || '-' }}</div>
+            </div>
+          </template>
         </el-table-column>
-        <el-table-column label="掩码" width="150">
-          <template #default="{ row }">{{ row.ipv4 ? (row.ipv4.mask + ' /' + row.ipv4.prefix) : '-' }}</template>
+        <el-table-column label="ipv6信息" min-width="280">
+          <template #default="{ row }">
+            <div class="net-cell">
+              <div>ipv6地址：{{ row.ipv6?.address || '-' }}</div>
+              <div>前缀：{{ row.ipv6?.prefix ?? '-' }}</div>
+              <div>网关：{{ row.gateway || '-' }}</div>
+              <div>主dns：{{ row.ipv6Dns1 || '-' }}</div>
+              <div>备dns：{{ row.ipv6Dns2 || '-' }}</div>
+            </div>
+          </template>
         </el-table-column>
-        <el-table-column label="IPv6 地址" min-width="220" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.ipv6?.address || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="前缀" width="70">
-          <template #default="{ row }">{{ row.ipv6?.prefix ?? '-' }}</template>
-        </el-table-column>
-        <el-table-column label="网关" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.gateway || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="主 DNS(IPv4)" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.dns1 || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="备 DNS(IPv4)" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.dns2 || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="主 DNS(IPv6)" min-width="180" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.ipv6Dns1 || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="备 DNS(IPv6)" min-width="180" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.ipv6Dns2 || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click="openEdit(row)">修改</el-button>
             <el-button size="small" :type="row.up ? 'danger' : 'success'" link @click="toggleUp(row)">
@@ -123,3 +118,6 @@ async function doApply() {
   } finally { saving.value = false }
 }
 </script>
+<style scoped>
+.net-cell { line-height: 1.9; font-size: 13px; }
+</style>

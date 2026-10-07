@@ -201,13 +201,19 @@ public class NetworkService {
     }
 
     private long readSpeed(String name) {
+        // 1) 有线网卡：/sys/class/net/<if>/speed（Mbps）
         try {
             String s = Files.readString(Paths.get("/sys/class/net", name, "speed")).trim();
             long v = Long.parseLong(s);
-            return v < 0 ? 0 : v;
-        } catch (Exception e) {
-            return 0;
-        }
+            if (v > 0) return v;
+        } catch (Exception ignore) {}
+        // 2) 无线网卡：iw dev <if> link 解析 tx bitrate（MBit/s）
+        try {
+            String out = run("iw", "dev", name, "link");
+            Matcher m = Pattern.compile("tx bitrate:\\s*([0-9]+(?:\\.[0-9]+)?)").matcher(out);
+            if (m.find()) return (long) Double.parseDouble(m.group(1));
+        } catch (Exception ignore) {}
+        return 0;
     }
 
     private boolean skip(String name) {
