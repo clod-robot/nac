@@ -6,6 +6,7 @@
       <el-menu :default-active="$route.path" router background-color="#1f2d3d" text-color="#bfcbd9" active-text-color="#409EFF">
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/network"><el-icon><Connection /></el-icon><span>网络管理</span></el-menu-item>
@@ -41,6 +42,7 @@
       <el-menu :default-active="$route.path" router background-color="#1f2d3d" text-color="#bfcbd9" active-text-color="#409EFF" @select="drawer = false">
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/network"><el-icon><Connection /></el-icon><span>网络管理</span></el-menu-item>

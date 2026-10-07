@@ -29,12 +29,15 @@ public class PortalService {
     private final AuthLogMapper authLogMapper;
     private final SmsService smsService;
     private final RedisUtil redisUtil;
+    private final ExemptTerminalService exemptService;
 
-    public PortalService(PortalConfigMapper configMapper, AuthLogMapper authLogMapper, SmsService smsService, RedisUtil redisUtil) {
+    public PortalService(PortalConfigMapper configMapper, AuthLogMapper authLogMapper, SmsService smsService,
+                         RedisUtil redisUtil, ExemptTerminalService exemptService) {
         this.configMapper = configMapper;
         this.authLogMapper = authLogMapper;
         this.smsService = smsService;
         this.redisUtil = redisUtil;
+        this.exemptService = exemptService;
     }
 
     public Map<String, String> config() {
@@ -61,6 +64,19 @@ public class PortalService {
 
     /** 短信验证码通过后颁发 portalToken，记录上网 IP/MAC（脱敏） */
     public String auth(String phone, String code, String mac, String ip) {
+        // 免认证终端：MAC/IP 命中白名单直接放行，无需短信验证码
+        if (exemptService.isExempt(mac, ip)) {
+            String token = IdUtil.fastSimpleUUID();
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("mac", mac);
+            payload.put("ip", ip);
+            payload.put("phoneMask", "免认证终端");
+            payload.put("ts", System.currentTimeMillis());
+            redisUtil.set(PORTAL_TOKEN_PREFIX + token, JSON.toJSONString(payload), TTL);
+            recordAuth("portal", null, "免认证终端", mac, ip, 1, "免认证终端放行");
+            log.info("Portal 免认证放行: ip={} mac={}", ip, mac);
+            return token;
+        }
         try {
             smsService.verifyCode(phone, code);
         } catch (RuntimeException e) {

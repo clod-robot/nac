@@ -24,9 +24,9 @@ public interface SysUserMapper {
     int clearRadiusCipher(@Param("id") Long id);
 
     /* ---------- 账号管理（admin） ---------- */
-    java.util.List<SysUser> selectPage(@Param("offset") int offset, @Param("size") int size);
+    java.util.List<SysUser> selectPage(@Param("offset") int offset, @Param("size") int size, @Param("keyword") String keyword);
 
-    long countAll();
+    long countAll(@Param("keyword") String keyword);
 
     int updateStatus(@Param("id") Long id, @Param("status") int status);
 

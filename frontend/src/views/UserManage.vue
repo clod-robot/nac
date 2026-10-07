@@ -4,6 +4,10 @@
       <div class="head">
         <span>账号管理</span>
         <div class="head-right">
+          <el-input v-model="keyword" placeholder="搜索账号/姓名/手机号" clearable size="small"
+            style="width:210px;margin-right:8px" @keyup.enter="onSearch" @clear="onSearch">
+            <template #append><el-button @click="onSearch">搜索</el-button></template>
+          </el-input>
           <el-select v-model="deptFilter" placeholder="按部门筛选" clearable size="small" style="width:160px;margin-right:8px">
             <el-option v-for="d in deptOptions" :key="d" :label="d" :value="d" />
           </el-select>
@@ -100,6 +104,7 @@ const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
 const deptFilter = ref('')
+const keyword = ref('')
 
 const deptOptions = computed(() => [...new Set(list.value.map(u => u.dept).filter(Boolean))])
 const filteredList = computed(() => deptFilter.value ? list.value.filter(u => u.dept === deptFilter.value) : list.value)
@@ -107,7 +112,7 @@ const filteredList = computed(() => deptFilter.value ? list.value.filter(u => u.
 async function load() {
   loading.value = true
   try {
-    const r = await userList({ page: page.value, size: size.value })
+    const r = await userList({ page: page.value, size: size.value, keyword: keyword.value || undefined })
     list.value = r.data.list || []
     total.value = r.data.total || 0
   } finally {
@@ -115,6 +120,7 @@ async function load() {
   }
 }
 function onPage(p) { page.value = p; load() }
+function onSearch() { page.value = 1; load() }
 
 const createVisible = ref(false)
 const saving = ref(false)

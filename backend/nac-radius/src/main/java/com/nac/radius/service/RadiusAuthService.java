@@ -6,6 +6,7 @@ import com.nac.radius.config.RadiusProperties;
 import com.nac.radius.entity.AuthLog;
 import com.nac.radius.entity.RadiusUser;
 import com.nac.radius.mapper.AuthLogMapper;
+import com.nac.radius.mapper.ExemptTerminalMapper;
 import com.nac.radius.mapper.NasMapper;
 import com.nac.radius.mapper.RadiusUserMapper;
 import com.nac.radius.packet.RadiusCodes;
@@ -14,6 +15,9 @@ import com.nac.radius.packet.RadiusPacket;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * RADIUS 认证（RFC 2865）：支持 PAP 与 CHAP。
@@ -30,11 +34,12 @@ public class RadiusAuthService {
     private final AesCryptoUtil aesCryptoUtil;
     private final RadiusProperties props;
     private final RadiusSecretService secretService;
+    private final ExemptTerminalMapper exemptMapper;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
 
     public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, NasMapper nasMapper,
                              RedisUtil redisUtil, AesCryptoUtil aesCryptoUtil, RadiusProperties props,
-                             RadiusSecretService secretService) {
+                             RadiusSecretService secretService, ExemptTerminalMapper exemptMapper) {
         this.userMapper = userMapper;
         this.authLogMapper = authLogMapper;
         this.nasMapper = nasMapper;
@@ -42,12 +47,30 @@ public class RadiusAuthService {
         this.aesCryptoUtil = aesCryptoUtil;
         this.props = props;
         this.secretService = secretService;
+        this.exemptMapper = exemptMapper;
     }
 
     /** 处理 Access-Request，返回响应报文（Accept/Reject），异常时返回 Reject。 */
     public RadiusPacket authenticate(RadiusPacket request) {
         String username = request.getString(RadiusCodes.USER_NAME);
         RadiusPacket reject = new RadiusPacket(RadiusCodes.ACCESS_REJECT, request.getIdentifier(), null);
+
+        // 免认证终端：Calling-Station-Id(MAC) 或 Framed-IP 命中白名单直接 Accept（MAB 放行）
+        String callingMac = request.getString(RadiusCodes.CALLING_STATION_ID);
+        String framedIp = framedIpOf(request);
+        if (isExempt(callingMac, framedIp)) {
+            RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
+            accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
+            if (props.getVlanId() > 0) {
+                accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
+                accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);
+                accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
+            }
+            accept.addString(RadiusCodes.REPLY_MESSAGE, "exempt terminal accepted");
+            recordAuth(request, 1, "免认证终端放行");
+            log.info("RADIUS 免认证放行: mac={} ip={}", callingMac, framedIp);
+            return accept;
+        }
 
         if (isBlank(username)) {
             reject.addString(RadiusCodes.REPLY_MESSAGE, "missing username");
@@ -132,6 +155,35 @@ public class RadiusAuthService {
             return (ip[0] & 0xff) + "." + (ip[1] & 0xff) + "." + (ip[2] & 0xff) + "." + (ip[3] & 0xff);
         }
         return request.getString(RadiusCodes.NAS_IP_ADDRESS);
+    }
+
+    /** Framed-IP-Address 为 4 字节属性，转点分十进制。 */
+    private String framedIpOf(RadiusPacket request) {
+        byte[] ip = request.getAttr(RadiusCodes.FRAMED_IP_ADDRESS);
+        if (ip != null && ip.length == 4) {
+            return (ip[0] & 0xff) + "." + (ip[1] & 0xff) + "." + (ip[2] & 0xff) + "." + (ip[3] & 0xff);
+        }
+        return null;
+    }
+
+    /** 命中已启用的 MAC 或 IP 即视为免认证终端。 */
+    private boolean isExempt(String mac, String ip) {
+        try {
+            String nMac = norm(mac);
+            String nIp = ip == null ? "" : ip.trim();
+            for (Map<String, String> t : exemptMapper.listEnabled()) {
+                String tm = t.get("mac"), ti = t.get("ip");
+                if (tm != null && !tm.isBlank() && norm(tm).equals(nMac) && !nMac.isEmpty()) return true;
+                if (ti != null && !ti.isBlank() && ti.trim().equals(nIp) && !nIp.isEmpty()) return true;
+            }
+        } catch (Exception e) {
+            log.warn("免认证终端查询失败: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    private String norm(String mac) {
+        return mac == null ? "" : mac.replaceAll("[^0-9a-fA-F]", "").toLowerCase();
     }
 
     /** PAP：解密报文口令，与存储凭证比对；CHAP：需要可逆明文。 */

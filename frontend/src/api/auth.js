@@ -51,3 +51,9 @@ export const setSmsConfig = (data) => request.put('/api/auth/sms/admin/config', 
 // 网络管理（admin）
 export const getNetworkInterfaces = () => request.get('/api/auth/network/interfaces')
 export const applyNetwork = (data) => request.post('/api/auth/network/apply', data)
+
+// 免认证终端（admin）
+export const exemptList = () => request.get('/api/auth/admin/exempt-terminals')
+export const exemptCreate = (data) => request.post('/api/auth/admin/exempt-terminals', data)
+export const exemptUpdate = (data) => request.put('/api/auth/admin/exempt-terminals', data)
+export const exemptDelete = (id) => request.delete(`/api/auth/admin/exempt-terminals/${id}`)

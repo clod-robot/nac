@@ -61,12 +61,26 @@
     <select id="selectPage" resultMap="userMap">
         SELECT id, username, real_name, role_code, dept, status, terminal_limit, create_time, update_time
         FROM sys_user
+        <where>
+            <if test="keyword != null and keyword != ''">
+                (username LIKE CONCAT('%', #{keyword}, '%')
+                 OR real_name LIKE CONCAT('%', #{keyword}, '%')
+                 OR phone_blind LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
         ORDER BY id ASC
         LIMIT #{offset}, #{size}
     </select>
 
     <select id="countAll" resultType="long">
         SELECT COUNT(*) FROM sys_user
+        <where>
+            <if test="keyword != null and keyword != ''">
+                (username LIKE CONCAT('%', #{keyword}, '%')
+                 OR real_name LIKE CONCAT('%', #{keyword}, '%')
+                 OR phone_blind LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
     </select>
 
     <select id="countAdmin" resultType="long">

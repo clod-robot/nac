@@ -33,13 +33,14 @@ public class UserController {
     @GetMapping("/list")
     @RequireRole
     public Result<Map<String, Object>> list(@RequestParam(defaultValue = "1") int page,
-                                            @RequestParam(defaultValue = "20") int size) {
+                                            @RequestParam(defaultValue = "20") int size,
+                                            @RequestParam(required = false) String keyword) {
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
-        List<SysUser> list = userMapper.selectPage((page - 1) * size, size);
+        List<SysUser> list = userMapper.selectPage((page - 1) * size, size, keyword);
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
-        data.put("total", userMapper.countAll());
+        data.put("total", userMapper.countAll(keyword));
         return Result.success(data);
     }
 
