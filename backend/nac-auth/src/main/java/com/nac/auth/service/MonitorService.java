@@ -14,6 +14,8 @@ import oshi.hardware.NetworkIF;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -89,6 +91,7 @@ public class MonitorService {
         long total = mem.getTotal();
         long avail = mem.getAvailable();
         long used = Math.max(0, total - avail);
+        long cached = cachedBytes();
         double memUsage = total > 0 ? used * 100.0 / total : 0;
 
         long now = System.currentTimeMillis();
@@ -133,6 +136,7 @@ public class MonitorService {
         MonitorSnapshot.Memory m = new MonitorSnapshot.Memory();
         m.setTotalBytes(total);
         m.setUsedBytes(used);
+        m.setCachedBytes(cached);
         m.setAvailableBytes(avail);
         m.setUsagePercent(round(memUsage));
         m.setFrequencyMHz(memoryFrequency());
@@ -204,6 +208,26 @@ public class MonitorService {
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** 缓存（buff/cache）：Cached + Buffers + SReclaimable，读 /proc/meminfo（单位 kB→字节）；非 Linux 返回 0。 */
+    private long cachedBytes() {
+        try {
+            long kb = 0;
+            for (String line : Files.readAllLines(Path.of("/proc/meminfo"))) {
+                if (line.startsWith("Cached:") || line.startsWith("Buffers:") || line.startsWith("SReclaimable:")) {
+                    int colon = line.indexOf(':');
+                    int kbIdx = line.indexOf("kB", colon);
+                    if (colon > 0 && kbIdx > colon) {
+                        String num = line.substring(colon + 1, kbIdx).trim();
+                        kb += Long.parseLong(num);
+                    }
+                }
+            }
+            return kb * 1024L;
+        } catch (Exception e) {
+            return 0L;
         }
     }
 

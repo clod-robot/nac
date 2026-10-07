@@ -23,6 +23,7 @@ public class MonitorSnapshot {
     public static class Memory {
         private long totalBytes;       // 总内存
         private long usedBytes;        // 已用
+        private long cachedBytes;      // 缓存（buff/cache，可回收）
         private long availableBytes;   // 可用
         private double usagePercent;   // 使用率 0-100
         private Integer frequencyMHz;  // 内存频率（无权限读取时为 null）

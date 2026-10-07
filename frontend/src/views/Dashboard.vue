@@ -33,7 +33,9 @@
           <div class="res-title">内存</div>
           <div class="res-line">大小：<span class="mono">{{ fmtBytes(mem.totalBytes) }}</span>
             &nbsp;|&nbsp; 频率：<span class="mono">{{ mem.frequencyMHz ? mem.frequencyMHz + ' MHz' : '—' }}</span></div>
-          <div class="res-line">已用 <span class="mono">{{ fmtBytes(mem.usedBytes) }}</span> / 可用 <span class="mono">{{ fmtBytes(mem.availableBytes) }}</span></div>
+          <div class="res-line">已用 <span class="mono">{{ fmtBytes(mem.usedBytes) }}</span>
+            &nbsp;|&nbsp; 缓存 <span class="mono" title="Linux 磁盘缓存，可即时回收">{{ fmtBytes(mem.cachedBytes) }}</span>
+            &nbsp;|&nbsp; 可用 <span class="mono">{{ fmtBytes(mem.availableBytes) }}</span></div>
           <div class="res-line">使用率：
             <el-progress :percentage="mem.usagePercent" :stroke-width="14" :color="usageColor(mem.usagePercent)" style="width:260px;display:inline-block;vertical-align:middle" />
           </div>
@@ -96,7 +98,7 @@ let pieInst, barInst
 const loading = ref(true)
 const sseOn = ref(false)
 const cpu = reactive({ model: '', physicalCores: 0, logicalCores: 0, usage: 0 })
-const mem = reactive({ totalBytes: 0, usedBytes: 0, availableBytes: 0, usagePercent: 0, frequencyMHz: null })
+const mem = reactive({ totalBytes: 0, usedBytes: 0, cachedBytes: 0, availableBytes: 0, usagePercent: 0, frequencyMHz: null })
 const network = ref([])
 const services = ref([])
 
