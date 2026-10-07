@@ -40,3 +40,6 @@ export const userUpdateLimit = (data) => request.put('/api/auth/admin/users/term
 export const userUpdateDept = (data) => request.put('/api/auth/admin/users/dept', data)
 export const userResetPassword = (data) => request.put('/api/auth/admin/users/password', data)
 export const userDelete = (id) => request.delete(`/api/auth/admin/users/${id}`)
+
+// 仪表盘服务器监控
+export const getMonitorSnapshot = () => request.get('/api/auth/monitor/snapshot')

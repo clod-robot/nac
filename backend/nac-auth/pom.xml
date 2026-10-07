@@ -21,6 +21,8 @@
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-websocket</artifactId></dependency>
         <dependency><groupId>com.hierynomus</groupId><artifactId>sshj</artifactId><version>0.38.0</version></dependency>
+        <!-- 服务器硬件指标采集（CPU/内存/网卡），仪表盘监控用 -->
+        <dependency><groupId>com.github.oshi</groupId><artifactId>oshi-core</artifactId><version>6.4.13</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
         <dependency><groupId>org.mybatis.spring.boot</groupId><artifactId>mybatis-spring-boot-starter</artifactId></dependency>
         <dependency><groupId>com.alibaba</groupId><artifactId>druid-spring-boot-3-starter</artifactId></dependency>
