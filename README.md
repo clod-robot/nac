@@ -14,13 +14,13 @@
 ### 后端（backend/，Spring Boot 微服务）
 | 组件 | 版本 |
 |---|---|
-| Spring Boot | **4.1.1** |
-| Spring Cloud | **2025.1.3**（Oakwood） |
-| Spring Cloud Gateway（WebFlux） | 随 Spring Cloud |
+| Spring Boot | **3.3.5** |
+| Spring Cloud | **2023.0.3**（Leyton） |
+| Spring Cloud Gateway（WebFlux） | 随 Spring Cloud 2023 |
 | MyBatis Spring Boot Starter | 3.0.4 |
 | Druid（druid-spring-boot-3-starter） | 1.2.23 |
 | MySQL Connector/J | 8.4.0 |
-| Netty | **4.2.18.Final**（RADIUS UDP，CVE-2026-59901 已修复） |
+| Netty | **4.1.138.Final**（RADIUS UDP，CVE 已修复） |
 | JJWT | 0.12.6 |
 | Hutool | 5.8.32 |
 | Apache Commons Lang3 | 3.17.0 |

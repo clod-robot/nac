@@ -6,6 +6,7 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 // 前端通过网关 8080 访问后端，避免跨域与直连下游
 export default defineConfig({
+  base: '/nac/',
   plugins: [
     vue(),
     AutoImport({ resolvers: [ElementPlusResolver()] }),
