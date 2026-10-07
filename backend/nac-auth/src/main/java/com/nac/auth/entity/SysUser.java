@@ -17,6 +17,7 @@ public class SysUser {
     private String phoneBlind;
     private String radiusPasswordCipher; // RADIUS 专用可逆密文（内部使用，接口不返回）
     private String roleCode;
+    private String dept; // 归属部门
     private Integer status;
     private Integer terminalLimit; // 终端数上限（每账号允许接入的终端数量）
     private LocalDateTime createTime;

@@ -51,16 +51,25 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import { Odometer, Setting, Document, Tickets, Monitor, ArrowDown, Key, Menu, User } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import { logout } from '../api/auth'
 import { useBreakpoints } from '../composables/useBreakpoints'
+import { useIdleTimeout } from '../composables/useIdleTimeout'
 
 const router = useRouter()
 const store = useUserStore()
 const { isNarrow } = useBreakpoints()
 const drawer = ref(false)
+
+// 30 分钟无操作自动退出系统
+useIdleTimeout(async () => {
+  try { await logout() } catch (e) {}
+  store.logout()
+  ElMessage.warning('长时间无操作，已自动退出系统')
+  router.replace('/login')
+})
 
 async function onCmd(c) {
   if (c === 'logout') {

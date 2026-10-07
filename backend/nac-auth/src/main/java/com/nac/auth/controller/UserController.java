@@ -48,6 +48,7 @@ public class UserController {
         private String username;
         private String password;
         private String realName;
+        private String dept;
         private String roleCode;
         private Integer terminalLimit;
     }
@@ -68,6 +69,7 @@ public class UserController {
         u.setUsername(req.getUsername().trim());
         u.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         u.setRealName(req.getRealName());
+        u.setDept(req.getDept());
         u.setRoleCode((req.getRoleCode() == null || req.getRoleCode().isBlank()) ? "user" : req.getRoleCode());
         u.setStatus(1);
         u.setTerminalLimit(req.getTerminalLimit() == null ? 5 : req.getTerminalLimit());
@@ -90,8 +92,8 @@ public class UserController {
         }
         if (req.getStatus() != null && req.getStatus() == 0) {
             SysUser u = userMapper.selectById(req.getId());
-            if (u != null && "admin".equals(u.getRoleCode()) && userMapper.countAdmin() <= 1) {
-                throw new BusinessException(400, "至少保留一个启用的管理员");
+            if (u != null && "admin".equals(u.getRoleCode())) {
+                throw new BusinessException(400, "系统管理员不能禁用");
             }
         }
         userMapper.updateStatus(req.getId(), req.getStatus() == null ? 1 : req.getStatus());
@@ -111,6 +113,19 @@ public class UserController {
             throw new BusinessException(400, "终端数量不合法");
         }
         userMapper.updateTerminalLimit(req.getId(), req.getTerminalLimit());
+        return Result.success();
+    }
+
+    @Data
+    public static class DeptReq {
+        private Long id;
+        private String dept;
+    }
+
+    @PutMapping("/dept")
+    @RequireRole
+    public Result<Void> dept(@RequestBody DeptReq req) {
+        userMapper.updateDept(req.getId(), req.getDept());
         return Result.success();
     }
 
@@ -138,8 +153,8 @@ public class UserController {
             throw new BusinessException(403, "不能删除当前登录账号");
         }
         SysUser u = userMapper.selectById(id);
-        if (u != null && "admin".equals(u.getRoleCode()) && userMapper.countAdmin() <= 1) {
-            throw new BusinessException(400, "至少保留一个管理员");
+        if (u != null && "admin".equals(u.getRoleCode())) {
+            throw new BusinessException(400, "系统管理员不能删除");
         }
         userMapper.deleteById(id);
         return Result.success();

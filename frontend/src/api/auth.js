@@ -31,5 +31,6 @@ export const userList = (params) => request.get('/api/auth/admin/users/list', { 
 export const userCreate = (data) => request.post('/api/auth/admin/users', data)
 export const userUpdateStatus = (data) => request.put('/api/auth/admin/users/status', data)
 export const userUpdateLimit = (data) => request.put('/api/auth/admin/users/terminal-limit', data)
+export const userUpdateDept = (data) => request.put('/api/auth/admin/users/dept', data)
 export const userResetPassword = (data) => request.put('/api/auth/admin/users/password', data)
 export const userDelete = (id) => request.delete(`/api/auth/admin/users/${id}`)

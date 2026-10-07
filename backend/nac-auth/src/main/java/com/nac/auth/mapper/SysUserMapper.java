@@ -32,6 +32,8 @@ public interface SysUserMapper {
 
     int updateTerminalLimit(@Param("id") Long id, @Param("terminalLimit") int terminalLimit);
 
+    int updateDept(@Param("id") Long id, @Param("dept") String dept);
+
     int deleteById(@Param("id") Long id);
 
     long countAdmin();

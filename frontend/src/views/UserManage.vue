@@ -3,34 +3,47 @@
     <template #header>
       <div class="head">
         <span>账号管理</span>
-        <el-button type="primary" size="small" @click="openCreate">新增账号</el-button>
+        <div class="head-right">
+          <el-select v-model="deptFilter" placeholder="按部门筛选" clearable size="small" style="width:160px;margin-right:8px">
+            <el-option v-for="d in deptOptions" :key="d" :label="d" :value="d" />
+          </el-select>
+          <el-button type="primary" size="small" @click="openCreate">新增账号</el-button>
+        </div>
       </div>
     </template>
 
-    <el-table :data="list" border v-loading="loading">
+    <el-table :data="filteredList" border v-loading="loading">
       <el-table-column prop="username" label="账号" min-width="120" />
-      <el-table-column prop="realName" label="归属人" min-width="120" />
-      <el-table-column label="角色" width="110">
+      <el-table-column prop="realName" label="归属人" min-width="110" />
+      <el-table-column label="部门" min-width="140">
+        <template #default="{ row }">
+          <el-select v-model="row.dept" placeholder="选择/输入部门" size="small" filterable allow-create default-first-option
+            style="width:100%" @change="saveDept(row)">
+            <el-option v-for="d in deptOptions" :key="d" :label="d" :value="d" />
+          </el-select>
+        </template>
+      </el-table-column>
+      <el-table-column label="角色" width="100">
         <template #default="{ row }">
           <el-tag :type="row.roleCode === 'admin' ? 'danger' : 'info'">{{ row.roleCode === 'admin' ? '管理员' : '普通用户' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="终端数量" width="160">
+      <el-table-column label="终端数量" width="150">
         <template #default="{ row }">
           <el-input-number v-model="row.terminalLimit" :min="0" :max="9999" size="small" controls-position="right" @change="saveLimit(row)" />
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="80">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'warning'">{{ row.status === 1 ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createTime" label="创建时间" min-width="160" />
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column prop="createTime" label="创建时间" min-width="150" />
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="toggleStatus(row)">{{ row.status === 1 ? '禁用' : '启用' }}</el-button>
+          <el-button v-if="row.roleCode !== 'admin'" size="small" @click="toggleStatus(row)">{{ row.status === 1 ? '禁用' : '启用' }}</el-button>
           <el-button size="small" type="warning" @click="openReset(row)">重置密码</el-button>
-          <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
+          <el-button v-if="row.roleCode !== 'admin'" size="small" type="danger" @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -44,6 +57,11 @@
         <el-form-item label="账号"><el-input v-model="form.username" placeholder="登录账号" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" /></el-form-item>
         <el-form-item label="归属人"><el-input v-model="form.realName" placeholder="姓名/归属人" /></el-form-item>
+        <el-form-item label="部门">
+          <el-select v-model="form.dept" placeholder="选择/输入部门" filterable allow-create default-first-option style="width:100%">
+            <el-option v-for="d in deptOptions" :key="d" :label="d" :value="d" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="form.roleCode" style="width:100%">
             <el-option label="普通用户" value="user" />
@@ -70,9 +88,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { userList, userCreate, userUpdateStatus, userUpdateLimit, userResetPassword, userDelete } from '../api/auth'
+import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userResetPassword, userDelete } from '../api/auth'
 import { useBreakpoints } from '../composables/useBreakpoints'
 
 const { isMobile } = useBreakpoints()
@@ -81,6 +99,10 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
+const deptFilter = ref('')
+
+const deptOptions = computed(() => [...new Set(list.value.map(u => u.dept).filter(Boolean))])
+const filteredList = computed(() => deptFilter.value ? list.value.filter(u => u.dept === deptFilter.value) : list.value)
 
 async function load() {
   loading.value = true
@@ -96,9 +118,9 @@ function onPage(p) { page.value = p; load() }
 
 const createVisible = ref(false)
 const saving = ref(false)
-const form = ref({ username: '', password: '', realName: '', roleCode: 'user', terminalLimit: 5 })
+const form = ref({ username: '', password: '', realName: '', dept: '', roleCode: 'user', terminalLimit: 5 })
 function openCreate() {
-  form.value = { username: '', password: '', realName: '', roleCode: 'user', terminalLimit: 5 }
+  form.value = { username: '', password: '', realName: '', dept: '', roleCode: 'user', terminalLimit: 5 }
   createVisible.value = true
 }
 async function onCreate() {
@@ -120,6 +142,12 @@ async function saveLimit(row) {
   try {
     await userUpdateLimit({ id: row.id, terminalLimit: row.terminalLimit })
     ElMessage.success('终端数量已更新')
+  } catch (e) { load() }
+}
+async function saveDept(row) {
+  try {
+    await userUpdateDept({ id: row.id, dept: row.dept || null })
+    ElMessage.success('部门已更新')
   } catch (e) { load() }
 }
 
@@ -151,4 +179,5 @@ onMounted(load)
 
 <style scoped>
 .head { display: flex; justify-content: space-between; align-items: center; }
+.head-right { display: flex; align-items: center; }
 </style>

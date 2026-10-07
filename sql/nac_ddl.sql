@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     phone_blind   VARCHAR(64)           DEFAULT NULL COMMENT '手机号 HMAC-SHA256 盲索引（用于等值查询）',
     radius_password_cipher VARCHAR(255)  DEFAULT NULL COMMENT 'RADIUS 专用可逆口令 AES-256-GCM 密文（CHAP/PAP 校验需明文）',
     role_code     VARCHAR(32)  NOT NULL DEFAULT 'user' COMMENT '角色编码（业务字段，无外键）',
+    dept          VARCHAR(64)           DEFAULT NULL COMMENT '归属部门',
     status        TINYINT      NOT NULL DEFAULT 1 COMMENT '状态 1启用 0禁用',
     terminal_limit INT         NOT NULL DEFAULT 5 COMMENT '终端数上限（每账号允许接入终端数）',
     create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
