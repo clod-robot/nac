@@ -8,6 +8,7 @@ import com.nac.auth.mapper.AuthLogMapper;
 import com.nac.auth.mapper.PortalConfigMapper;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.security.SensitiveUtil;
+import com.nac.common.syslog.SyslogForwarder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -30,14 +31,16 @@ public class PortalService {
     private final SmsService smsService;
     private final RedisUtil redisUtil;
     private final ExemptTerminalService exemptService;
+    private final SyslogForwarder syslogForwarder;
 
     public PortalService(PortalConfigMapper configMapper, AuthLogMapper authLogMapper, SmsService smsService,
-                         RedisUtil redisUtil, ExemptTerminalService exemptService) {
+                         RedisUtil redisUtil, ExemptTerminalService exemptService, SyslogForwarder syslogForwarder) {
         this.configMapper = configMapper;
         this.authLogMapper = authLogMapper;
         this.smsService = smsService;
         this.redisUtil = redisUtil;
         this.exemptService = exemptService;
+        this.syslogForwarder = syslogForwarder;
     }
 
     public Map<String, String> config() {
@@ -106,8 +109,13 @@ public class PortalService {
             l.setResult(result);
             l.setMessage(msg);
             authLogMapper.insert(l);
+            syslogForwarder.forwardAuthLog("authLog type=" + type + " user=" + nz(username)
+                    + " phone=" + nz(phone) + " mac=" + nz(mac) + " ip=" + nz(ip)
+                    + " result=" + result + " msg=" + nz(msg));
         } catch (Exception e) {
             log.warn("写认证日志失败: {}", e.getMessage());
         }
     }
+
+    private static String nz(String s) { return s == null ? "-" : s; }
 }

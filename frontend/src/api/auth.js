@@ -53,6 +53,11 @@ export const setSmsConfig = (data) => request.put('/api/auth/sms/admin/config', 
 export const getNetworkInterfaces = () => request.get('/api/auth/network/interfaces')
 export const applyNetwork = (data) => request.post('/api/auth/network/apply', data)
 
+// 日志管理 - syslog 外发（admin）
+export const getSyslogConfig = () => request.get('/api/auth/syslog/config')
+export const saveSyslogConfig = (data) => request.put('/api/auth/syslog/config', data)
+export const testSyslog = () => request.post('/api/auth/syslog/test')
+
 // 免认证终端（admin）
 export const exemptList = () => request.get('/api/auth/admin/exempt-terminals')
 export const exemptCreate = (data) => request.post('/api/auth/admin/exempt-terminals', data)

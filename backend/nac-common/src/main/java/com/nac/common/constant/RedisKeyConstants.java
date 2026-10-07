@@ -34,6 +34,8 @@ public interface RedisKeyConstants {
     String RADIUS_SHARED_SECRET = "nac:radius:shared-secret";
     /** 短信网关配置（provider + 各云凭证，JSON，Redis 持久化，可热修改） */
     String SMS_CONFIG = "nac:sms:config";
+    /** 日志外发 syslog 服务器配置（JSON，Redis 持久化，可热修改） */
+    String SYSLOG_CONFIG = "nac:syslog:config";
     /** 日志未过滤总数缓存 */
     String LOG_COUNT_ALL = "nac:log:count:all";
     /** 进程内缓存通用 TTL（秒） */

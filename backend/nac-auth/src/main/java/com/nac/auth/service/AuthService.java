@@ -11,6 +11,7 @@ import com.nac.common.exception.BusinessException;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.result.ResultCode;
 import com.nac.common.security.JwtUtil;
+import com.nac.common.syslog.SyslogForwarder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,9 +30,11 @@ public class AuthService {
     private final RedisUtil redisUtil;
     private final CaptchaService captchaService;
     private final LoginAttemptService loginAttemptService;
+    private final SyslogForwarder syslogForwarder;
 
     public AuthService(SysUserMapper userMapper, AuthLogMapper authLogMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
-                       RedisUtil redisUtil, CaptchaService captchaService, LoginAttemptService loginAttemptService) {
+                       RedisUtil redisUtil, CaptchaService captchaService, LoginAttemptService loginAttemptService,
+                       SyslogForwarder syslogForwarder) {
         this.userMapper = userMapper;
         this.authLogMapper = authLogMapper;
         this.passwordEncoder = passwordEncoder;
@@ -39,6 +42,7 @@ public class AuthService {
         this.redisUtil = redisUtil;
         this.captchaService = captchaService;
         this.loginAttemptService = loginAttemptService;
+        this.syslogForwarder = syslogForwarder;
     }
 
     public LoginVO login(LoginRequest req, String ip) {
@@ -95,8 +99,13 @@ public class AuthService {
             l.setResult(result);
             l.setMessage(msg);
             authLogMapper.insert(l);
+            syslogForwarder.forwardAuthLog("authLog type=" + type + " user=" + nz(username)
+                    + " phone=" + nz(phone) + " mac=" + nz(mac) + " ip=" + nz(ip)
+                    + " result=" + result + " msg=" + nz(msg));
         } catch (Exception e) {
             log.warn("写认证日志失败: {}", e.getMessage());
         }
     }
+
+    private static String nz(String s) { return s == null ? "-" : s; }
 }

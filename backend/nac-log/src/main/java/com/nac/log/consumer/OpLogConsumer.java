@@ -1,6 +1,7 @@
 package com.nac.log.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nac.common.syslog.SyslogForwarder;
 import com.nac.log.entity.SysLog;
 import com.nac.log.mapper.SysLogMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -23,9 +24,11 @@ public class OpLogConsumer {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final SysLogMapper sysLogMapper;
+    private final SyslogForwarder syslogForwarder;
 
-    public OpLogConsumer(SysLogMapper sysLogMapper) {
+    public OpLogConsumer(SysLogMapper sysLogMapper, SyslogForwarder syslogForwarder) {
         this.sysLogMapper = sysLogMapper;
+        this.syslogForwarder = syslogForwarder;
     }
 
     @KafkaListener(topics = "nac-op-log", groupId = "nac-log")
@@ -49,6 +52,8 @@ public class OpLogConsumer {
                 sl.setCreateTime(LocalDateTime.now());
             }
             sysLogMapper.insert(sl);
+            // 外发到 syslog 服务器（静默降级，不影响落库）
+            syslogForwarder.forwardOpLog(formatOp(sl));
         } catch (Exception e) {
             log.warn("操作日志消费失败: {}", e.getMessage());
         }
@@ -82,4 +87,18 @@ public class OpLogConsumer {
         if (s == null) return null;
         return s.length() > max ? s.substring(0, max) : s;
     }
+
+    private static String formatOp(SysLog sl) {
+        StringBuilder sb = new StringBuilder("opLog ");
+        sb.append("user=").append(nz(sl.getOperator())).append('/').append(sl.getOperatorId());
+        sb.append(" role=").append(nz(sl.getRole()));
+        sb.append(" ip=").append(nz(sl.getIp()));
+        sb.append(" method=").append(nz(sl.getMethod()));
+        sb.append(" op=").append(nz(sl.getOperation()));
+        sb.append(" status=").append(nz(sl.getStatus()));
+        sb.append(" cost=").append(sl.getCostMs()).append("ms");
+        return sb.toString();
+    }
+
+    private static String nz(String s) { return s == null ? "-" : s; }
 }

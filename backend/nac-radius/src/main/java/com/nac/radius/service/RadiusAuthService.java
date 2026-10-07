@@ -2,6 +2,7 @@ package com.nac.radius.service;
 
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.security.AesCryptoUtil;
+import com.nac.common.syslog.SyslogForwarder;
 import com.nac.radius.config.RadiusProperties;
 import com.nac.radius.entity.AuthLog;
 import com.nac.radius.entity.RadiusUser;
@@ -35,11 +36,13 @@ public class RadiusAuthService {
     private final RadiusProperties props;
     private final RadiusSecretService secretService;
     private final ExemptTerminalMapper exemptMapper;
+    private final SyslogForwarder syslogForwarder;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
 
     public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, NasMapper nasMapper,
                              RedisUtil redisUtil, AesCryptoUtil aesCryptoUtil, RadiusProperties props,
-                             RadiusSecretService secretService, ExemptTerminalMapper exemptMapper) {
+                             RadiusSecretService secretService, ExemptTerminalMapper exemptMapper,
+                             SyslogForwarder syslogForwarder) {
         this.userMapper = userMapper;
         this.authLogMapper = authLogMapper;
         this.nasMapper = nasMapper;
@@ -48,6 +51,7 @@ public class RadiusAuthService {
         this.props = props;
         this.secretService = secretService;
         this.exemptMapper = exemptMapper;
+        this.syslogForwarder = syslogForwarder;
     }
 
     /** 处理 Access-Request，返回响应报文（Accept/Reject），异常时返回 Reject。 */
@@ -138,6 +142,8 @@ public class RadiusAuthService {
             l.setResult(result);
             l.setMessage(msg);
             authLogMapper.insert(l);
+            syslogForwarder.forwardAuthLog("authLog type=radius user=" + nz(userMask)
+                    + " nasIp=" + nz(nasIp) + " result=" + result + " msg=" + nz(msg));
             // 登记 NAS（无 IP 则跳过）
             if (nasIp != null && !nasIp.isBlank()) {
                 nasMapper.touch(nasIp, request.getString(RadiusCodes.NAS_IDENTIFIER), userMask,
@@ -255,4 +261,6 @@ public class RadiusAuthService {
         if (u.length() <= 2) return "***";
         return u.charAt(0) + "***" + u.charAt(u.length() - 1);
     }
+
+    private static String nz(String s) { return s == null ? "-" : s; }
 }
