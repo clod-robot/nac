@@ -102,11 +102,11 @@ onMounted(loadCaptcha)
 </script>
 
 <style scoped>
-.login-wrap { height: 100vh; display: flex; align-items: center; justify-content: center; background: #1f2d3d; }
-.login-card { width: 380px; }
+.login-wrap { height: 100vh; height: 100dvh; display: flex; align-items: center; justify-content: center; background: #1f2d3d; padding: 16px; }
+.login-card { width: min(380px, 100%); }
 .title { font-size: 18px; font-weight: 600; text-align: center; }
-.cap-row { display: flex; gap: 8px; width: 100%; }
-.cap-row .el-input { flex: 1; }
-.cap-img { height: 40px; cursor: pointer; border: 1px solid #dcdfe6; border-radius: 4px; }
+.cap-row { display: flex; gap: 8px; width: 100%; align-items: center; }
+.cap-row .el-input { flex: 1; min-width: 0; }
+.cap-img { height: 40px; cursor: pointer; border: 1px solid #dcdfe6; border-radius: 4px; flex-shrink: 0; }
 .tip { margin-top: 12px; color: #909399; font-size: 12px; text-align: center; }
 </style>

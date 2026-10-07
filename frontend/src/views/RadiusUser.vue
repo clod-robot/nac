@@ -15,7 +15,7 @@
 
       <!-- 结果 -->
       <el-card v-if="status" shadow="never" class="result">
-        <el-descriptions :column="3" border>
+        <el-descriptions :column="isMobile ? 1 : 3" border>
           <el-descriptions-item label="用户名">{{ status.username }}</el-descriptions-item>
           <el-descriptions-item label="账号状态">
             <el-tag :type="status.status === 1 ? 'success' : 'info'">{{ status.status === 1 ? '启用' : '禁用' }}</el-tag>
@@ -33,7 +33,7 @@
     </el-card>
 
     <!-- 设置口令弹窗 -->
-    <el-dialog v-model="setVisible" :title="status && status.enabled ? '重置 802.1X 口令' : '开通 802.1X 口令'" width="420px">
+    <el-dialog v-model="setVisible" :title="status && status.enabled ? '重置 802.1X 口令' : '开通 802.1X 口令'" :width="isMobile ? '92%' : '420px'">
       <el-form label-width="90px">
         <el-form-item label="用户名">
           <el-input :model-value="status && status.username" disabled />
@@ -54,6 +54,9 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRadiusStatus, setRadiusPassword, clearRadiusPassword } from '../api/auth'
+import { useBreakpoints } from '../composables/useBreakpoints'
+
+const { isMobile } = useBreakpoints()
 
 const queryName = ref('')
 const querying = ref(false)

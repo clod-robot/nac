@@ -1,14 +1,14 @@
 <template>
   <div>
     <el-row :gutter="16">
-      <el-col :span="6"><el-card><div class="kpi">在线终端<span class="num">{{ online }}</span></div></el-card></el-col>
-      <el-col :span="6"><el-card><div class="kpi">今日认证<span class="num">{{ todayAuth }}</span></div></el-card></el-col>
-      <el-col :span="6"><el-card><div class="kpi">短信发送<span class="num">{{ smsCnt }}</span></div></el-card></el-col>
-      <el-col :span="6"><el-card><div class="kpi">异常拦截<span class="num">{{ blocked }}</span></div></el-card></el-col>
+      <el-col :span="6" :xs="12" :sm="12" :md="6"><el-card><div class="kpi">在线终端<span class="num">{{ online }}</span></div></el-card></el-col>
+      <el-col :span="6" :xs="12" :sm="12" :md="6"><el-card><div class="kpi">今日认证<span class="num">{{ todayAuth }}</span></div></el-card></el-col>
+      <el-col :span="6" :xs="12" :sm="12" :md="6"><el-card><div class="kpi">短信发送<span class="num">{{ smsCnt }}</span></div></el-card></el-col>
+      <el-col :span="6" :xs="12" :sm="12" :md="6"><el-card><div class="kpi">异常拦截<span class="num">{{ blocked }}</span></div></el-card></el-col>
     </el-row>
     <el-row :gutter="16" style="margin-top:16px">
-      <el-col :span="12"><el-card><div ref="pie" style="height:320px"></div></el-card></el-col>
-      <el-col :span="12"><el-card><div ref="bar" style="height:320px"></div></el-card></el-col>
+      <el-col :span="12" :xs="24" :sm="24" :md="12"><el-card><div ref="pie" style="height:320px"></div></el-card></el-col>
+      <el-col :span="12" :xs="24" :sm="24" :md="12"><el-card><div ref="bar" style="height:320px"></div></el-card></el-col>
     </el-row>
   </div>
 </template>
