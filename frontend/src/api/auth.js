@@ -43,3 +43,7 @@ export const userDelete = (id) => request.delete(`/api/auth/admin/users/${id}`)
 
 // 仪表盘服务器监控
 export const getMonitorSnapshot = () => request.get('/api/auth/monitor/snapshot')
+
+// 短信网关配置（admin）
+export const getSmsConfig = () => request.get('/api/auth/sms/admin/config')
+export const setSmsConfig = (data) => request.put('/api/auth/sms/admin/config', data)

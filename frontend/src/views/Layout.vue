@@ -7,6 +7,7 @@
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/nas"><el-icon><Key /></el-icon><span>NAS管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/op-log"><el-icon><Document /></el-icon><span>操作日志</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/auth-log"><el-icon><Tickets /></el-icon><span>认证日志</span></el-menu-item>
@@ -40,6 +41,7 @@
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/nas"><el-icon><Key /></el-icon><span>NAS管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/op-log"><el-icon><Document /></el-icon><span>操作日志</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/auth-log"><el-icon><Tickets /></el-icon><span>认证日志</span></el-menu-item>
@@ -54,7 +56,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Odometer, Setting, Document, Tickets, Monitor, Connection, ArrowDown, Key, Menu, User } from '@element-plus/icons-vue'
+import { Odometer, Setting, Message, Document, Tickets, Monitor, Connection, ArrowDown, Key, Menu, User } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import { logout } from '../api/auth'
 import { useBreakpoints } from '../composables/useBreakpoints'

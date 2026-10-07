@@ -38,6 +38,7 @@ public class SmsService {
     private static final Pattern PHONE = Pattern.compile("^1[3-9]\\d{9}$");
 
     private final SmsGatewayFactory gatewayFactory;
+    private final SmsConfigService configService;
     private final CaptchaService captchaService;
     private final RedisUtil redisUtil;
     private final PhoneCryptoUtil phoneCryptoUtil;
@@ -59,10 +60,11 @@ public class SmsService {
     @Value("${nac.sms.max-fail:5}")
     private int maxFail;
 
-    public SmsService(SmsGatewayFactory gatewayFactory, CaptchaService captchaService, RedisUtil redisUtil,
-                      PhoneCryptoUtil phoneCryptoUtil, JwtUtil jwtUtil, SysUserMapper userMapper,
+    public SmsService(SmsGatewayFactory gatewayFactory, SmsConfigService configService, CaptchaService captchaService,
+                      RedisUtil redisUtil, PhoneCryptoUtil phoneCryptoUtil, JwtUtil jwtUtil, SysUserMapper userMapper,
                       SmsRecordMapper smsRecordMapper, PasswordEncoder passwordEncoder) {
         this.gatewayFactory = gatewayFactory;
+        this.configService = configService;
         this.captchaService = captchaService;
         this.redisUtil = redisUtil;
         this.phoneCryptoUtil = phoneCryptoUtil;
@@ -102,7 +104,7 @@ public class SmsService {
         String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1_000_000));
         boolean ok = false;
         String failReason = null;
-        SmsGateway gateway = gatewayFactory.get(provider);
+        SmsGateway gateway = gatewayFactory.get(configService.get().getProvider());
         try {
             ok = gateway.send(phone, null, null, Map.of("code", code));
         } catch (Exception e) {

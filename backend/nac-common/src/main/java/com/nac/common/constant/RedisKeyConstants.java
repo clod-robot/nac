@@ -32,6 +32,8 @@ public interface RedisKeyConstants {
     String ONLINE_SESSION_PREFIX = "nac:online:";
     /** RADIUS 与 NAS 约定的共享密钥（Redis 持久化，可在 NAS 管理页热修改） */
     String RADIUS_SHARED_SECRET = "nac:radius:shared-secret";
+    /** 短信网关配置（provider + 各云凭证，JSON，Redis 持久化，可热修改） */
+    String SMS_CONFIG = "nac:sms:config";
     /** 日志未过滤总数缓存 */
     String LOG_COUNT_ALL = "nac:log:count:all";
     /** 进程内缓存通用 TTL（秒） */

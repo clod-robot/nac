@@ -12,6 +12,7 @@ const routes = [
       { path: 'dashboard', component: () => import('../views/Dashboard.vue') },
       { path: 'user', component: () => import('../views/UserManage.vue'), meta: { roles: ['admin'] } },
       { path: 'portal-config', component: () => import('../views/PortalConfig.vue'), meta: { roles: ['admin'] } },
+      { path: 'sms-gateway', component: () => import('../views/SmsGateway.vue'), meta: { roles: ['admin'] } },
       { path: 'nas', component: () => import('../views/NasManage.vue'), meta: { roles: ['admin'] } },
       { path: 'op-log', component: () => import('../views/OpLog.vue'), meta: { roles: ['admin'] } },
       { path: 'auth-log', component: () => import('../views/AuthLog.vue'), meta: { roles: ['admin'] } },
