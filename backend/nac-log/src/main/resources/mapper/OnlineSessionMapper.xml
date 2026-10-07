@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.log.mapper.OnlineSessionMapper">
+
+    <select id="selectPage" resultType="com.nac.log.entity.OnlineSession">
+        SELECT id, acct_session_id, username_mask, mac, nas_ip, framed_ip, vlan_id, status, start_time, update_time
+        FROM sys_online_session
+        WHERE status = 1
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1) FROM sys_online_session WHERE status = 1
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM sys_online_session WHERE id = #{id}
+    </delete>
+
+</mapper>

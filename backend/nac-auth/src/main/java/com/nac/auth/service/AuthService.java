@@ -2,7 +2,9 @@ package com.nac.auth.service;
 
 import com.nac.auth.dto.LoginRequest;
 import com.nac.auth.dto.LoginVO;
+import com.nac.auth.entity.AuthLog;
 import com.nac.auth.entity.SysUser;
+import com.nac.auth.mapper.AuthLogMapper;
 import com.nac.auth.mapper.SysUserMapper;
 import com.nac.common.constant.RedisKeyConstants;
 import com.nac.common.exception.BusinessException;
@@ -21,15 +23,17 @@ import org.springframework.stereotype.Service;
 public class AuthService {
 
     private final SysUserMapper userMapper;
+    private final AuthLogMapper authLogMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final RedisUtil redisUtil;
     private final CaptchaService captchaService;
     private final LoginAttemptService loginAttemptService;
 
-    public AuthService(SysUserMapper userMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+    public AuthService(SysUserMapper userMapper, AuthLogMapper authLogMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
                        RedisUtil redisUtil, CaptchaService captchaService, LoginAttemptService loginAttemptService) {
         this.userMapper = userMapper;
+        this.authLogMapper = authLogMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.redisUtil = redisUtil;
@@ -60,10 +64,12 @@ public class AuthService {
                 && passwordEncoder.matches(req.getPassword(), user.getPasswordHash());
         if (!ok) {
             loginAttemptService.recordFail(ip, req.getUsername());
+            recordAuth("login", req.getUsername(), null, null, ip, 0, "用户名或密码错误");
             // 统一错误信息，防止账号枚举
             throw new BusinessException(ResultCode.USERNAME_OR_PASSWORD_ERROR);
         }
         loginAttemptService.clear(ip, req.getUsername());
+        recordAuth("login", user.getUsername(), null, null, ip, 1, "登录成功");
 
         String token = jwtUtil.generate(user.getId(), user.getUsername(), user.getRoleCode());
         redisUtil.set(RedisKeyConstants.TOKEN_PREFIX + user.getId(), token, (int) jwtUtil.getExpireSeconds());
@@ -74,6 +80,23 @@ public class AuthService {
     public void logout(Long userId) {
         if (userId != null) {
             redisUtil.delete(RedisKeyConstants.TOKEN_PREFIX + userId);
+        }
+    }
+
+    /** 写认证日志，任何异常不影响主流程 */
+    private void recordAuth(String type, String username, String phone, String mac, String ip, int result, String msg) {
+        try {
+            AuthLog l = new AuthLog();
+            l.setAuthType(type);
+            l.setUsername(username);
+            l.setPhone(phone);
+            l.setMac(mac);
+            l.setIp(ip);
+            l.setResult(result);
+            l.setMessage(msg);
+            authLogMapper.insert(l);
+        } catch (Exception e) {
+            log.warn("写认证日志失败: {}", e.getMessage());
         }
     }
 }

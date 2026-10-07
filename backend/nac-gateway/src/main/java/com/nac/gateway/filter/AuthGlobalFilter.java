@@ -47,12 +47,18 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         String path = request.getURI().getPath();
         String method = request.getMethod() == null ? "" : request.getMethod().name();
 
-        // /api/portal/** 仅 GET 匿名放行
+        // portal：公开接口匿名放行；/api/portal/admin/** 为管理接口，必须走下方 JWT 校验并注入角色头
         if (matcher.match("/api/portal/**", path)) {
-            if ("GET".equalsIgnoreCase(method)) {
+            boolean adminApi = matcher.match("/api/portal/admin/**", path);
+            boolean publicGet = "GET".equalsIgnoreCase(method);                       // /api/portal/config 公开读取
+            boolean publicAuth = "POST".equalsIgnoreCase(method) && matcher.match("/api/portal/auth", path);
+            if (!adminApi && (publicGet || publicAuth)) {
                 return chain.filter(exchange.mutate().request(cleanHeaders(request)).build());
             }
-            return unauthorized(exchange, "Portal 写接口需登录");
+            if (!adminApi) {
+                return unauthorized(exchange, "Portal 写接口需登录");
+            }
+            // 管理接口继续向下执行 JWT 校验
         }
 
         if (isWhitelist(path)) {

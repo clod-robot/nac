@@ -3,7 +3,9 @@ package com.nac.radius.service;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.security.AesCryptoUtil;
 import com.nac.radius.config.RadiusProperties;
+import com.nac.radius.entity.AuthLog;
 import com.nac.radius.entity.RadiusUser;
+import com.nac.radius.mapper.AuthLogMapper;
 import com.nac.radius.mapper.RadiusUserMapper;
 import com.nac.radius.packet.RadiusCodes;
 import com.nac.radius.packet.RadiusCodec;
@@ -21,14 +23,16 @@ import org.springframework.stereotype.Service;
 public class RadiusAuthService {
 
     private final RadiusUserMapper userMapper;
+    private final AuthLogMapper authLogMapper;
     private final RedisUtil redisUtil;
     private final AesCryptoUtil aesCryptoUtil;
     private final RadiusProperties props;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
 
-    public RadiusAuthService(RadiusUserMapper userMapper, RedisUtil redisUtil,
+    public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, RedisUtil redisUtil,
                              AesCryptoUtil aesCryptoUtil, RadiusProperties props) {
         this.userMapper = userMapper;
+        this.authLogMapper = authLogMapper;
         this.redisUtil = redisUtil;
         this.aesCryptoUtil = aesCryptoUtil;
         this.props = props;
@@ -41,12 +45,14 @@ public class RadiusAuthService {
 
         if (isBlank(username)) {
             reject.addString(RadiusCodes.REPLY_MESSAGE, "missing username");
+            recordAuth(request, 0, "missing username");
             return reject;
         }
         // 防爆破：该用户是否处于失败锁定窗口
         if (isUserLocked(username)) {
             log.info("RADIUS 认证拒绝(锁定中): user={}", mask(username));
             reject.addString(RadiusCodes.REPLY_MESSAGE, "account temporarily locked");
+            recordAuth(request, 0, "账号锁定中");
             return reject;
         }
 
@@ -56,11 +62,13 @@ public class RadiusAuthService {
         } catch (Exception e) {
             log.error("RADIUS 查询用户失败: {}", e.getMessage());
             reject.addString(RadiusCodes.REPLY_MESSAGE, "server error");
+            recordAuth(request, 0, "服务异常");
             return reject;
         }
         if (user == null || user.getStatus() == null || user.getStatus() != 1) {
             registerFailure(username);
             reject.addString(RadiusCodes.REPLY_MESSAGE, "invalid credentials");
+            recordAuth(request, 0, "账号不存在或已禁用");
             return reject;
         }
 
@@ -69,6 +77,7 @@ public class RadiusAuthService {
             registerFailure(username);
             log.info("RADIUS 认证失败: user={}", mask(username));
             reject.addString(RadiusCodes.REPLY_MESSAGE, "invalid credentials");
+            recordAuth(request, 0, "口令校验失败");
             return reject;
         }
 
@@ -83,8 +92,24 @@ public class RadiusAuthService {
             accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
         }
         accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(username));
+        recordAuth(request, 1, "认证成功");
         log.info("RADIUS 认证成功: user={} nas={}", mask(username), request.getString(RadiusCodes.NAS_IP_ADDRESS));
         return accept;
+    }
+
+    /** 写 RADIUS 认证日志，任何异常不影响认证响应 */
+    private void recordAuth(RadiusPacket request, int result, String msg) {
+        try {
+            AuthLog l = new AuthLog();
+            l.setAuthType("radius");
+            l.setUsername(mask(request.getString(RadiusCodes.USER_NAME)));
+            l.setNasIp(request.getString(RadiusCodes.NAS_IP_ADDRESS));
+            l.setResult(result);
+            l.setMessage(msg);
+            authLogMapper.insert(l);
+        } catch (Exception e) {
+            log.warn("写 RADIUS 认证日志失败: {}", e.getMessage());
+        }
     }
 
     /** PAP：解密报文口令，与存储凭证比对；CHAP：需要可逆明文。 */

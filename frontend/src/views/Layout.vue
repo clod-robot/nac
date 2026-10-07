@@ -9,7 +9,8 @@
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/radius-user"><el-icon><Key /></el-icon><span>802.1X 口令</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/op-log"><el-icon><Document /></el-icon><span>操作日志</span></el-menu-item>
-        <el-menu-item index="/portal"><el-icon><Connection /></el-icon><span>终端认证</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/auth-log"><el-icon><Tickets /></el-icon><span>认证日志</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/online"><el-icon><Monitor /></el-icon><span>终端在线</span></el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -40,7 +41,8 @@
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/radius-user"><el-icon><Key /></el-icon><span>802.1X 口令</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/op-log"><el-icon><Document /></el-icon><span>操作日志</span></el-menu-item>
-        <el-menu-item index="/portal"><el-icon><Connection /></el-icon><span>终端认证</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/auth-log"><el-icon><Tickets /></el-icon><span>认证日志</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/online"><el-icon><Monitor /></el-icon><span>终端在线</span></el-menu-item>
       </el-menu>
     </el-drawer>
   </el-container>
@@ -50,7 +52,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Odometer, Setting, Document, Connection, ArrowDown, Key, Menu, User } from '@element-plus/icons-vue'
+import { Odometer, Setting, Document, Tickets, Monitor, ArrowDown, Key, Menu, User } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import { logout } from '../api/auth'
 import { useBreakpoints } from '../composables/useBreakpoints'

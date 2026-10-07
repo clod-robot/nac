@@ -120,6 +120,23 @@ CREATE TABLE IF NOT EXISTS radius_acct_record (
     KEY idx_create_time (create_time)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='RADIUS 计费历史';
 
+-- 认证日志（登录 / Portal / RADIUS 全量认证留痕，append-only，等保审计）
+CREATE TABLE IF NOT EXISTS sys_auth_log (
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    auth_type   VARCHAR(20)  NOT NULL COMMENT 'login/portal/radius/sms',
+    username    VARCHAR(64)           DEFAULT NULL COMMENT '账号或脱敏账号',
+    phone       VARCHAR(32)           DEFAULT NULL COMMENT '脱敏手机号',
+    mac         VARCHAR(32)           DEFAULT NULL COMMENT '终端MAC',
+    ip          VARCHAR(64)           DEFAULT NULL COMMENT '客户端IP',
+    nas_ip      VARCHAR(64)           DEFAULT NULL COMMENT 'NAS设备IP',
+    result      TINYINT      NOT NULL COMMENT '1成功 0失败',
+    message     VARCHAR(255)          DEFAULT NULL COMMENT '结果说明',
+    create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_auth_type (auth_type),
+    KEY idx_create_time (create_time)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='认证日志';
+
 -- 角色种子数据（admin 账号由 nac-auth 启动初始化器保证存在，密码 BCrypt）
 INSERT INTO sys_role (role_code, role_name, description)
 SELECT 'admin', '超级管理员', '系统管理员'

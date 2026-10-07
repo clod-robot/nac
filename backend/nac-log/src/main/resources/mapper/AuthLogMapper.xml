@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.log.mapper.AuthLogMapper">
+
+    <sql id="cols">id, auth_type, username, phone, mac, ip, nas_ip, result, message, create_time</sql>
+
+    <sql id="cond">
+        <where>
+            <if test="authType != null and authType != ''">AND auth_type = #{authType}</if>
+            <if test="result != null">AND result = #{result}</if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.nac.log.entity.AuthLog">
+        SELECT <include refid="cols"/> FROM sys_auth_log
+        <include refid="cond"/>
+        ORDER BY id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1) FROM sys_auth_log
+        <include refid="cond"/>
+    </select>
+
+</mapper>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.radius.mapper.AuthLogMapper">
+
+    <insert id="insert" parameterType="com.nac.radius.entity.AuthLog" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_auth_log (auth_type, username, phone, mac, ip, nas_ip, result, message, create_time)
+        VALUES (#{authType}, #{username}, #{phone}, #{mac}, #{ip}, #{nasIp}, #{result}, #{message}, NOW())
+    </insert>
+
+</mapper>

@@ -17,6 +17,9 @@ export const updatePortalConfig = (data) => request.put('/api/portal/admin/confi
 
 // 日志
 export const logList = (params) => request.get('/api/log/list', { params })
+export const authLogList = (params) => request.get('/api/log/auth-list', { params })
+export const onlineList = (params) => request.get('/api/log/online-list', { params })
+export const onlineDelete = (id) => request.delete(`/api/log/online/${id}`)
 
 // RADIUS 802.1X 口令管理（admin）
 export const getRadiusStatus = (username) => request.get('/api/auth/radius/password', { params: { username } })

@@ -13,7 +13,9 @@ const routes = [
       { path: 'user', component: () => import('../views/UserManage.vue'), meta: { roles: ['admin'] } },
       { path: 'portal-config', component: () => import('../views/PortalConfig.vue'), meta: { roles: ['admin'] } },
       { path: 'radius-user', component: () => import('../views/RadiusUser.vue'), meta: { roles: ['admin'] } },
-      { path: 'op-log', component: () => import('../views/OpLog.vue'), meta: { roles: ['admin'] } }
+      { path: 'op-log', component: () => import('../views/OpLog.vue'), meta: { roles: ['admin'] } },
+      { path: 'auth-log', component: () => import('../views/AuthLog.vue'), meta: { roles: ['admin'] } },
+      { path: 'online', component: () => import('../views/OnlineManage.vue'), meta: { roles: ['admin'] } }
     ]
   }
 ]
