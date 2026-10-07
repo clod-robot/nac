@@ -10,6 +10,7 @@ const routes = [
     redirect: '/dashboard',
     children: [
       { path: 'dashboard', component: () => import('../views/Dashboard.vue') },
+      { path: 'user', component: () => import('../views/UserManage.vue'), meta: { roles: ['admin'] } },
       { path: 'portal-config', component: () => import('../views/PortalConfig.vue'), meta: { roles: ['admin'] } },
       { path: 'radius-user', component: () => import('../views/RadiusUser.vue'), meta: { roles: ['admin'] } },
       { path: 'op-log', component: () => import('../views/OpLog.vue'), meta: { roles: ['admin'] } }

@@ -131,6 +131,8 @@
                     <configuration>
                         <release>${java.version}</release>
                         <encoding>UTF-8</encoding>
+                        <!-- 保留方法参数名：Spring Boot 3 反射绑定 @RequestParam/@PathVariable 必需（未用 starter-parent 时需显式开启） -->
+                        <parameters>true</parameters>
                     </configuration>
                 </plugin>
             </plugins>

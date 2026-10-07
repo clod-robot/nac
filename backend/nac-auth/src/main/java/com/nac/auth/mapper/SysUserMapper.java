@@ -22,4 +22,17 @@ public interface SysUserMapper {
 
     /** 清空 RADIUS 口令（置 NULL，关闭 802.1X 准入） */
     int clearRadiusCipher(@Param("id") Long id);
+
+    /* ---------- 账号管理（admin） ---------- */
+    java.util.List<SysUser> selectPage(@Param("offset") int offset, @Param("size") int size);
+
+    long countAll();
+
+    int updateStatus(@Param("id") Long id, @Param("status") int status);
+
+    int updateTerminalLimit(@Param("id") Long id, @Param("terminalLimit") int terminalLimit);
+
+    int deleteById(@Param("id") Long id);
+
+    long countAdmin();
 }

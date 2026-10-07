@@ -12,35 +12,36 @@
         <result property="radiusPasswordCipher" column="radius_password_cipher"/>
         <result property="roleCode" column="role_code"/>
         <result property="status" column="status"/>
+        <result property="terminalLimit" column="terminal_limit"/>
         <result property="createTime" column="create_time"/>
         <result property="updateTime" column="update_time"/>
     </resultMap>
 
     <!-- 显式列名，禁止 SELECT *；参数全部 #{} 预编译 -->
     <select id="selectByUsername" resultMap="userMap">
-        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, status, create_time, update_time
+        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, status, terminal_limit, create_time, update_time
         FROM sys_user
         WHERE username = #{username}
         LIMIT 1
     </select>
 
     <select id="selectById" resultMap="userMap">
-        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, status, create_time, update_time
+        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, status, terminal_limit, create_time, update_time
         FROM sys_user
         WHERE id = #{id}
         LIMIT 1
     </select>
 
     <select id="selectByPhoneBlind" resultMap="userMap">
-        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, status, create_time, update_time
+        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, status, terminal_limit, create_time, update_time
         FROM sys_user
         WHERE phone_blind = #{phoneBlind}
         LIMIT 1
     </select>
 
     <insert id="insert" parameterType="com.nac.auth.entity.SysUser" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO sys_user (username, password_hash, real_name, phone_cipher, phone_blind, role_code, status)
-        VALUES (#{username}, #{passwordHash}, #{realName}, #{phoneCipher}, #{phoneBlind}, #{roleCode}, #{status})
+        INSERT INTO sys_user (username, password_hash, real_name, phone_cipher, phone_blind, role_code, status, terminal_limit)
+        VALUES (#{username}, #{passwordHash}, #{realName}, #{phoneCipher}, #{phoneBlind}, #{roleCode}, #{status}, COALESCE(#{terminalLimit}, 5))
     </insert>
 
     <update id="updatePassword">
@@ -54,5 +55,33 @@
     <update id="clearRadiusCipher">
         UPDATE sys_user SET radius_password_cipher = NULL WHERE id = #{id}
     </update>
+
+    <!-- 账号管理：列表不含密码哈希 -->
+    <select id="selectPage" resultMap="userMap">
+        SELECT id, username, real_name, role_code, status, terminal_limit, create_time, update_time
+        FROM sys_user
+        ORDER BY id ASC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM sys_user
+    </select>
+
+    <select id="countAdmin" resultType="long">
+        SELECT COUNT(*) FROM sys_user WHERE role_code = 'admin' AND status = 1
+    </select>
+
+    <update id="updateStatus">
+        UPDATE sys_user SET status = #{status} WHERE id = #{id}
+    </update>
+
+    <update id="updateTerminalLimit">
+        UPDATE sys_user SET terminal_limit = #{terminalLimit} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM sys_user WHERE id = #{id}
+    </delete>
 
 </mapper>

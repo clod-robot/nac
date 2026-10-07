@@ -22,3 +22,11 @@ export const logList = (params) => request.get('/api/log/list', { params })
 export const getRadiusStatus = (username) => request.get('/api/auth/radius/password', { params: { username } })
 export const setRadiusPassword = (data) => request.post('/api/auth/radius/password', data)
 export const clearRadiusPassword = (username) => request.delete('/api/auth/radius/password', { params: { username } })
+
+// 账号管理（admin）
+export const userList = (params) => request.get('/api/auth/admin/users/list', { params })
+export const userCreate = (data) => request.post('/api/auth/admin/users', data)
+export const userUpdateStatus = (data) => request.put('/api/auth/admin/users/status', data)
+export const userUpdateLimit = (data) => request.put('/api/auth/admin/users/terminal-limit', data)
+export const userResetPassword = (data) => request.put('/api/auth/admin/users/password', data)
+export const userDelete = (id) => request.delete(`/api/auth/admin/users/${id}`)
