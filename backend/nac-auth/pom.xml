@@ -19,6 +19,8 @@
         <dependency><groupId>com.aliyun</groupId><artifactId>dysmsapi20170525</artifactId><version>2.0.24</version></dependency>
         <dependency><groupId>com.tencentcloudapi</groupId><artifactId>tencentcloud-sdk-java-sms</artifactId><version>3.2.18</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-websocket</artifactId></dependency>
+        <dependency><groupId>com.hierynomus</groupId><artifactId>sshj</artifactId><version>0.38.0</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
         <dependency><groupId>org.mybatis.spring.boot</groupId><artifactId>mybatis-spring-boot-starter</artifactId></dependency>
         <dependency><groupId>com.alibaba</groupId><artifactId>druid-spring-boot-3-starter</artifactId></dependency>

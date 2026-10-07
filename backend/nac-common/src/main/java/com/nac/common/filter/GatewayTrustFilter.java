@@ -48,6 +48,12 @@ public class GatewayTrustFilter {
                     chain.doFilter(request, response);
                     return;
                 }
+                // WebSocket 路径放行：其鉴权由握手后的 JWT 在处理器内完成（浏览器无法携带网关 HMAC 头）
+                String uri = req.getRequestURI();
+                if (uri != null && uri.startsWith("/ws/")) {
+                    chain.doFilter(request, response);
+                    return;
+                }
                 String ts = req.getHeader("X-Gateway-Ts");
                 String sign = req.getHeader("X-Gateway-Sign");
                 if (!hmacUtil.verify(internalSecret, ts, req.getMethod(), req.getRequestURI(), sign)) {
