@@ -8,24 +8,29 @@ spring:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
-  # Spring Cloud Gateway (WebFlux) 路由
   cloud:
+    # Nacos 服务发现：网关与各业务服务均注册到 Nacos，路由用 lb:// 按服务名转发
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+    # Spring Cloud Gateway (WebFlux) 路由
     gateway:
       routes:
         - id: nac-auth
-          uri: http://localhost:8081
+          uri: lb://nac-auth
           predicates:
             - Path=/api/auth/**,/api/portal/**,/free-auth/**
         - id: nac-user
-          uri: http://localhost:8082
+          uri: lb://nac-user
           predicates:
             - Path=/api/user/**,/api/device/**
         - id: nac-radius
-          uri: http://localhost:8083
+          uri: lb://nac-radius
           predicates:
             - Path=/api/radius/**
         - id: nac-log
-          uri: http://localhost:8084
+          uri: lb://nac-log
           predicates:
             - Path=/api/log/**
 

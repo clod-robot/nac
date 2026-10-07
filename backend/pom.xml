@@ -31,6 +31,8 @@
         <!-- 版本统一管理：JDK21 + Spring Boot 3.3.5 + Spring Cloud 2023.0 (Leyton) -->
         <spring-boot.version>3.3.5</spring-boot.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <!-- Spring Cloud Alibaba 2023.0.1.0 对应 Spring Cloud 2023.0.x / Boot 3.3.x，提供 Nacos 服务发现 -->
+        <spring-cloud-alibaba.version>2023.0.1.0</spring-cloud-alibaba.version>
         <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
         <druid.version>1.2.23</druid.version>
         <mysql.version>8.4.0</mysql.version>
@@ -97,6 +99,14 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud Alibaba：Nacos 服务发现/负载均衡版本管理 -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

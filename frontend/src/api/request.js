@@ -27,7 +27,17 @@ request.interceptors.response.use(
     return Promise.reject(d)
   },
   (err) => {
-    ElMessage.error('网络异常，请稍后重试')
+    // 服务重启/不可达时给出友好的降级提示，避免笼统“网络异常”或页面白屏
+    const status = err && err.response ? err.response.status : 0
+    const url = (err && err.config && err.config.url) || ''
+    if (status === 502 || status === 503 || status === 504) {
+      ElMessage({ type: 'warning', message: '服务正在升级维护，稍后即可恢复（' + url + '）', duration: 3000 })
+    } else if (!err.response) {
+      // 连接被拒绝 / 网络中断：通常是目标服务正在重启
+      ElMessage({ type: 'warning', message: '服务暂时不可用，请稍后重试（' + url + '）', duration: 3000 })
+    } else {
+      ElMessage.error('请求失败（' + status + '）')
+    }
     return Promise.reject(err)
   }
 )
