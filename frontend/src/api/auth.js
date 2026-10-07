@@ -47,3 +47,7 @@ export const getMonitorSnapshot = () => request.get('/api/auth/monitor/snapshot'
 // 短信网关配置（admin）
 export const getSmsConfig = () => request.get('/api/auth/sms/admin/config')
 export const setSmsConfig = (data) => request.put('/api/auth/sms/admin/config', data)
+
+// 网络管理（admin）
+export const getNetworkInterfaces = () => request.get('/api/auth/network/interfaces')
+export const applyNetwork = (data) => request.post('/api/auth/network/apply', data)
