@@ -34,3 +34,7 @@ application-local.yml
 application-local.yaml
 *.p12
 *.jks
+
+frontend/dist.zip
+frontend/dist/
+
