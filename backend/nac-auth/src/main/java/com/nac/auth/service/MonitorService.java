@@ -2,6 +2,7 @@ package com.nac.auth.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.nac.auth.dto.MonitorSnapshot;
+import com.nac.auth.dto.NetInterface;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,8 @@ public class MonitorService {
 
     private volatile MonitorSnapshot latest = new MonitorSnapshot();
 
+    private final NetworkService networkService;
+
     private long[] prevTicks;
     private final Map<String, long[]> prevNet = new HashMap<>(); // name -> [rx, tx]
     private long prevTs = 0L;
@@ -58,7 +61,8 @@ public class MonitorService {
             {"RADIUS", 8083}, {"日志 log", 8084}
     };
 
-    public MonitorService() {
+    public MonitorService(NetworkService networkService) {
+        this.networkService = networkService;
         collect();
         scheduler.scheduleAtFixedRate(this::collectSafe, 5, 5, TimeUnit.SECONDS);
     }
@@ -92,22 +96,27 @@ public class MonitorService {
         if (interval <= 0) interval = 5.0;
         prevTs = now;
 
-        List<NetworkIF> nets = si.getHardware().getNetworkIFs();
-        List<MonitorSnapshot.Net> netList = new ArrayList<>();
-        for (NetworkIF n : nets) {
+        // 接口清单与“网络管理”同源（NetworkService），吞吐速率由 OSHI 计数器差分得到
+        Map<String, NetworkIF> oshiByName = new HashMap<>();
+        for (NetworkIF n : si.getHardware().getNetworkIFs()) {
             n.updateAttributes();
-            long rx = n.getBytesRecv();
-            long tx = n.getBytesSent();
-            long[] p = prevNet.get(n.getName());
+            oshiByName.put(n.getName(), n);
+        }
+        List<MonitorSnapshot.Net> netList = new ArrayList<>();
+        for (NetInterface base : networkService.listBasic()) {
+            NetworkIF n = oshiByName.get(base.getName());
+            long rx = n != null ? n.getBytesRecv() : 0;
+            long tx = n != null ? n.getBytesSent() : 0;
+            long[] p = prevNet.get(base.getName());
             long rxRate = p != null ? Math.max(0, (long) ((rx - p[0]) / interval)) : 0;
             long txRate = p != null ? Math.max(0, (long) ((tx - p[1]) / interval)) : 0;
-            prevNet.put(n.getName(), new long[]{rx, tx});
+            prevNet.put(base.getName(), new long[]{rx, tx});
 
             MonitorSnapshot.Net ni = new MonitorSnapshot.Net();
-            ni.setName(n.getName());
-            ni.setDisplayName(n.getDisplayName());
-            ni.setUp(n.getIfOperStatus() == NetworkIF.IfOperStatus.UP);
-            ni.setSpeedMbps(n.getSpeed() > 0 ? n.getSpeed() / 1_000_000L : 0);
+            ni.setName(base.getName());
+            ni.setDisplayName(base.getOperState());
+            ni.setUp(base.isLinkUp());
+            ni.setSpeedMbps(base.getSpeedMbps());
             ni.setRxRateBps(rxRate);
             ni.setTxRateBps(txRate);
             netList.add(ni);

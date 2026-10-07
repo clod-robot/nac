@@ -83,12 +83,12 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
-import { getMonitorSnapshot } from '../api/auth'
+import { getMonitorSnapshot, getMonitorStats, onlineList } from '../api/auth'
 
-const online = ref(128)
-const todayAuth = ref(342)
-const smsCnt = ref(87)
-const blocked = ref(5)
+const online = ref(0)
+const todayAuth = ref(0)
+const smsCnt = ref(0)
+const blocked = ref(0)
 const pie = ref(null)
 const bar = ref(null)
 let pieInst, barInst
@@ -113,6 +113,43 @@ async function loadSnapshot() {
   } finally {
     loading.value = false
   }
+}
+
+function pad(n) { return n < 10 ? '0' + n : '' + n }
+
+// 今日认证/短信/拦截 + 饼图/柱图（真实数据）
+async function loadStats() {
+  try {
+    const r = await getMonitorStats()
+    const d = r.data || {}
+    todayAuth.value = d.todayAuth ?? 0
+    smsCnt.value = d.smsCnt ?? 0
+    blocked.value = d.blocked ?? 0
+
+    const pieData = (d.pie || []).map(p => ({ name: p.name, value: Number(p.value) || 0 }))
+    if (pieData.length === 0) pieData.push({ name: '暂无数据', value: 1 })
+    pieInst && pieInst.setOption({ series: [{ data: pieData }] })
+
+    const tmap = {}
+    ;(d.trend || []).forEach(t => { tmap[t.day] = Number(t.value) || 0 })
+    const days = [], vals = []
+    const now = new Date()
+    for (let i = 6; i >= 0; i--) {
+      const dt = new Date(now); dt.setDate(now.getDate() - i)
+      const key = dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate())
+      days.push((dt.getMonth() + 1) + '/' + dt.getDate())
+      vals.push(tmap[key] || 0)
+    }
+    barInst && barInst.setOption({ xAxis: { data: days }, series: [{ data: vals }] })
+  } catch (e) { /* 接口异常时保持 0，不阻断页面 */ }
+}
+
+// 在线终端数（每次进入仪表盘都从后端拉取）
+async function loadOnline() {
+  try {
+    const r = await onlineList({ page: 1, size: 1 })
+    online.value = (r.data && r.data.total) ? r.data.total : 0
+  } catch (e) { online.value = 0 }
 }
 
 function openSSE() {
@@ -157,20 +194,21 @@ onMounted(() => {
   pieInst.setOption({
     title: { text: '认证方式分布', left: 'center' },
     tooltip: { trigger: 'item' },
-    series: [{ type: 'pie', radius: ['40%', '70%'], data: [
-      { value: 210, name: '账号密码' }, { value: 90, name: '短信验证码' }, { value: 42, name: 'Portal' }
-    ] }]
+    legend: { bottom: 0 },
+    series: [{ type: 'pie', radius: ['40%', '70%'], data: [] }]
   })
   barInst = echarts.init(bar.value)
   barInst.setOption({
     title: { text: '近 7 日认证趋势', left: 'center' },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: ['周一','周二','周三','周四','周五','周六','周日'] },
+    xAxis: { type: 'category', data: [] },
     yAxis: { type: 'value' },
-    series: [{ type: 'bar', data: [120, 200, 150, 80, 70, 110, 130], itemStyle: { color: '#409EFF' } }]
+    series: [{ type: 'bar', data: [], itemStyle: { color: '#409EFF' } }]
   })
   window.addEventListener('resize', resize)
   loadSnapshot()
+  loadStats()
+  loadOnline()
   openSSE()
 })
 function resize() { pieInst && pieInst.resize(); barInst && barInst.resize() }

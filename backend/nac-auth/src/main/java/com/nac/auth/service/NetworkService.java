@@ -34,6 +34,36 @@ public class NetworkService {
     private static final String RESOLVECTL = "/usr/bin/resolvectl";
     private static final Pattern LINK_DNS = Pattern.compile("Link\\s+\\d+\\s+\\(([^)]+)\\):\\s*(.*)");
 
+    /** 基础接口列表（与网络管理同源同过滤），供仪表盘使用：不解析网关/DNS。 */
+    public List<NetInterface> listBasic() {
+        List<NetInterface> result = new ArrayList<>();
+        try {
+            String json = run(IP, "-json", "addr", "show");
+            JSONArray arr = JSON.parseArray(json);
+            for (int i = 0; i < arr.size(); i++) {
+                JSONObject o = arr.getJSONObject(i);
+                String name = o.getString("ifname");
+                if (skip(name)) continue;
+                NetInterface ni = new NetInterface();
+                ni.setName(name);
+                JSONArray flags = o.getJSONArray("flags");
+                boolean up = false;
+                if (flags != null) for (int j = 0; j < flags.size(); j++) {
+                    if ("UP".equals(flags.getString(j))) { up = true; break; }
+                }
+                ni.setUp(up);
+                ni.setOperState(o.getString("operstate"));
+                ni.setLinkUp("UP".equals(ni.getOperState()));
+                ni.setMtu(o.getIntValue("mtu"));
+                ni.setSpeedMbps(readSpeed(name));
+                result.add(ni);
+            }
+        } catch (Exception e) {
+            log.warn("读取基础网络接口失败: {}", e.getMessage());
+        }
+        return result;
+    }
+
     public List<NetInterface> listInterfaces() {
         Map<String, String> gwByDev = parseGateways();
         String globalGw = gwByDev.remove("__global__");
