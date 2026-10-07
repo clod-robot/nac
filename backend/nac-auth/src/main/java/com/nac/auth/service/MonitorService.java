@@ -60,7 +60,7 @@ public class MonitorService {
 
     public MonitorService() {
         collect();
-        scheduler.scheduleAtFixedRate(this::collectSafe, 2, 2, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::collectSafe, 5, 5, TimeUnit.SECONDS);
     }
 
     private void collectSafe() {
@@ -88,8 +88,8 @@ public class MonitorService {
         double memUsage = total > 0 ? used * 100.0 / total : 0;
 
         long now = System.currentTimeMillis();
-        double interval = prevTs > 0 ? (now - prevTs) / 1000.0 : 2.0;
-        if (interval <= 0) interval = 2.0;
+        double interval = prevTs > 0 ? (now - prevTs) / 1000.0 : 5.0;
+        if (interval <= 0) interval = 5.0;
         prevTs = now;
 
         List<NetworkIF> nets = si.getHardware().getNetworkIFs();

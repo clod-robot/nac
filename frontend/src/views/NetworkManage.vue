@@ -10,58 +10,59 @@
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:14px"
         title="修改地址/网关可能导致服务器断连，请确认操作。修改即时生效，重启后由系统网络服务还原。" />
 
-      <div v-for="n in list" :key="n.name" style="margin-bottom:16px">
-        <el-card shadow="never">
-          <template #header>
-            <div style="display:flex;align-items:center;gap:10px">
-              <b>{{ n.name }}</b>
-              <el-tag :type="n.up ? 'success' : 'info'" size="small">{{ n.up ? 'UP' : 'DOWN' }}</el-tag>
-              <el-tag size="small" type="info">速率 {{ n.speedMbps ? n.speedMbps + ' Mbps' : '未知' }}</el-tag>
-              <el-tag size="small" type="info">MTU {{ n.mtu }}</el-tag>
-              <el-tag size="small" type="info">{{ n.operState }}</el-tag>
-              <div style="margin-left:auto;display:flex;gap:8px">
-                <el-button size="small" type="primary" @click="openEdit(n)">修改</el-button>
-                <el-button size="small" :type="n.up ? 'danger' : 'success'" @click="toggleUp(n)">
-                  {{ n.up ? '禁用' : '启用' }}
-                </el-button>
-              </div>
-            </div>
+      <el-table :data="list" border stripe style="width:100%">
+        <el-table-column label="接口" prop="name" width="110" fixed />
+        <el-table-column label="状态" width="130">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row)" size="small">{{ statusText(row) }}</el-tag>
           </template>
-
-          <el-table :data="[n]" size="small" border style="margin-bottom:10px">
-            <el-table-column label="IPv4 地址" prop="ipv4.address" width="150">
-              <template #default="{ row }">{{ row.ipv4?.address || '-' }}</template>
-            </el-table-column>
-            <el-table-column label="掩码" width="140">
-              <template #default="{ row }">{{ row.ipv4?.mask || '-' }}（/{{ row.ipv4?.prefix }}）</template>
-            </el-table-column>
-            <el-table-column label="网关">{{ n.gateway || '-' }}</el-table-column>
-            <el-table-column label="主 DNS">{{ n.dns1 || '-' }}</el-table-column>
-            <el-table-column label="备 DNS">{{ n.dns2 || '-' }}</el-table-column>
-          </el-table>
-
-          <el-table :data="[n]" size="small" border>
-            <el-table-column label="IPv6 地址" prop="ipv6.address" width="240">
-              <template #default="{ row }">{{ row.ipv6?.address || '-' }}</template>
-            </el-table-column>
-            <el-table-column label="前缀" width="80">
-              <template #default="{ row }">{{ row.ipv6?.prefix ?? '-' }}</template>
-            </el-table-column>
-            <el-table-column label="网关">{{ n.gateway || '-' }}</el-table-column>
-            <el-table-column label="主 DNS">{{ n.dns1 || '-' }}</el-table-column>
-            <el-table-column label="备 DNS">{{ n.dns2 || '-' }}</el-table-column>
-            <el-table-column label="MTU" width="80">{{ n.mtu }}</el-table-column>
-          </el-table>
-        </el-card>
-      </div>
+        </el-table-column>
+        <el-table-column label="协商速率" width="110">
+          <template #default="{ row }">{{ row.speedMbps ? row.speedMbps + ' Mbps' : '未知' }}</template>
+        </el-table-column>
+        <el-table-column label="MTU" prop="mtu" width="70" />
+        <el-table-column label="IPv4 地址" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.ipv4?.address || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="掩码" width="150">
+          <template #default="{ row }">{{ row.ipv4 ? (row.ipv4.mask + ' /' + row.ipv4.prefix) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="IPv6 地址" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.ipv6?.address || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="前缀" width="70">
+          <template #default="{ row }">{{ row.ipv6?.prefix ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column label="网关" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.gateway || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="主 DNS(IPv4)" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.dns1 || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="备 DNS(IPv4)" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.dns2 || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="主 DNS(IPv6)" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.ipv6Dns1 || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="备 DNS(IPv6)" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.ipv6Dns2 || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" link @click="openEdit(row)">修改</el-button>
+            <el-button size="small" :type="row.up ? 'danger' : 'success'" link @click="toggleUp(row)">
+              {{ row.up ? '禁用' : '启用' }}
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
       <el-empty v-if="!loading && list.length === 0" description="未发现可用网络接口" />
     </el-card>
 
     <el-dialog v-model="dlg" title="修改网络配置" width="560px" @close="saving = false">
       <el-form label-width="110px">
-        <el-form-item label="启用">
-          <el-switch v-model="form.up" />
-        </el-form-item>
+        <el-form-item label="启用"><el-switch v-model="form.up" /></el-form-item>
         <el-form-item label="MTU"><el-input-number v-model="form.mtu" :min="576" :max="9000" /></el-form-item>
         <el-form-item label="IPv4 地址"><el-input v-model="form.ipv4Address" placeholder="如 192.168.10.88" /></el-form-item>
         <el-form-item label="IPv4 前缀"><el-input-number v-model="form.ipv4Prefix" :min="0" :max="32" /></el-form-item>
@@ -95,6 +96,8 @@ async function load() {
   loading.value = true
   try { list.value = (await getNetworkInterfaces()).data || [] } finally { loading.value = false }
 }
+function statusText(n) { return n.linkUp ? '在线' : n.up ? '已启用·未连接' : '已禁用' }
+function statusType(n) { return n.linkUp ? 'success' : n.up ? 'warning' : 'info' }
 function openEdit(n) {
   Object.assign(form, {
     name: n.name, up: n.up, mtu: n.mtu,

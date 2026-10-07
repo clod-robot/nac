@@ -57,6 +57,7 @@ public class NetworkService {
                 }
                 ni.setUp(up);
                 ni.setOperState(o.getString("operstate"));
+                ni.setLinkUp("UP".equals(ni.getOperState()));
                 ni.setMtu(o.getIntValue("mtu"));
                 ni.setSpeedMbps(readSpeed(name));
 
@@ -80,10 +81,20 @@ public class NetworkService {
                     }
                 }
                 ni.setGateway(gwByDev.getOrDefault(name, globalGw));
-                List<String> dns = dnsByDev.getOrDefault(name, globalDns);
+                // 按地址族拆分 DNS：v4 表只显示 IPv4 服务器，v6 表只显示 IPv6 服务器，没有则为空
+                List<String> dns = dnsByDev.get(name);
                 if (dns != null && !dns.isEmpty()) {
-                    ni.setDns1(dns.get(0));
-                    if (dns.size() > 1) ni.setDns2(dns.get(1));
+                    String v4a = null, v4b = null, v6a = null, v6b = null;
+                    for (String s : dns) {
+                        boolean isV6 = s.indexOf(':') >= 0;
+                        if (isV6) {
+                            if (v6a == null) v6a = s; else if (v6b == null) v6b = s;
+                        } else {
+                            if (v4a == null) v4a = s; else if (v4b == null) v4b = s;
+                        }
+                    }
+                    ni.setDns1(v4a); ni.setDns2(v4b);
+                    ni.setIpv6Dns1(v6a); ni.setIpv6Dns2(v6b);
                 }
                 result.add(ni);
             }

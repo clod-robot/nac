@@ -6,7 +6,8 @@ import lombok.Data;
 @Data
 public class NetInterface {
     private String name;
-    private boolean up;
+    private boolean up;          // 管理状态（flags 含 UP）
+    private boolean linkUp;      // 链路状态（operstate == UP，有载波）
     private String operState;
     /** 协商速率 Mbps，未知为 0 */
     private long speedMbps;
@@ -16,6 +17,8 @@ public class NetInterface {
     private String gateway;
     private String dns1;
     private String dns2;
+    private String ipv6Dns1;
+    private String ipv6Dns2;
 
     @Data
     public static class IpInfo {
