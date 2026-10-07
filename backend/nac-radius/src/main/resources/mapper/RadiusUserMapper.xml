@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.radius.mapper.RadiusUserMapper">
+
+    <resultMap id="u" type="com.nac.radius.entity.RadiusUser">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="passwordHash" column="password_hash"/>
+        <result property="radiusPasswordCipher" column="radius_password_cipher"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <select id="selectByUsername" resultMap="u">
+        SELECT id, username, password_hash, radius_password_cipher, status
+        FROM sys_user
+        WHERE username = #{username}
+        LIMIT 1
+    </select>
+</mapper>

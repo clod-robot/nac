@@ -1,0 +1,42 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: nac-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+  # Spring Cloud 2025.1 (Oakwood) WebFlux 网关新前缀
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: nac-auth
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/auth/**,/api/portal/**,/free-auth/**
+            - id: nac-user
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/user/**,/api/device/**
+            - id: nac-radius
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api/radius/**
+            - id: nac-log
+              uri: http://localhost:8084
+              predicates:
+                - Path=/api/log/**
+
+nac:
+  gateway:
+    internal-secret: ${NAC_INTERNAL_SECRET:NacInternal@2026-Gw2Svc}
+    # 白名单由 AuthGlobalFilter 默认值定义（含 login/captcha/sms/portal-auth），
+    # 如需覆盖请配置为逗号分隔字符串：nac.gateway.whitelist
+
+logging:
+  level:
+    com.nac: INFO

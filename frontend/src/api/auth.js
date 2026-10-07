@@ -1,0 +1,24 @@
+import request from './request'
+
+// 认证
+export const getCaptcha = () => request.get('/api/auth/captcha')
+export const login = (data) => request.post('/api/auth/login', data)
+export const logout = () => request.post('/api/auth/logout')
+
+// 短信
+export const sendSms = (data) => request.post('/api/auth/sms/send', data)
+export const smsLogin = (data) => request.post('/api/auth/sms/login', data)
+
+// Portal
+export const portalConfig = () => request.get('/api/portal/config')
+export const portalAuth = (data) => request.post('/api/portal/auth', data)
+export const portalAdminConfig = () => request.get('/api/portal/admin/config')
+export const updatePortalConfig = (data) => request.put('/api/portal/admin/config', data)
+
+// 日志
+export const logList = (params) => request.get('/api/log/list', { params })
+
+// RADIUS 802.1X 口令管理（admin）
+export const getRadiusStatus = (username) => request.get('/api/auth/radius/password', { params: { username } })
+export const setRadiusPassword = (data) => request.post('/api/auth/radius/password', data)
+export const clearRadiusPassword = (username) => request.delete('/api/auth/radius/password', { params: { username } })

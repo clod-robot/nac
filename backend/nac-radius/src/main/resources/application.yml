@@ -1,0 +1,39 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: nac-radius
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB:nac}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:127.0.0.1:9092}
+    producer:
+      retries: 1
+      acks: 1
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+nac:
+  radius:
+    auth-port: ${RADIUS_AUTH_PORT:1812}
+    acct-port: ${RADIUS_ACCT_PORT:1813}
+    shared-secret: ${RADIUS_SHARED_SECRET:NacRadius@2026}
+  gateway:
+    trust-enabled: ${GATEWAY_TRUST_ENABLED:true}
+    internal-secret: ${NAC_INTERNAL_SECRET:NacInternal@2026-Gw2Svc}
+
+logging:
+  level:
+    com.nac: INFO

@@ -1,0 +1,60 @@
+# NAC 中间件一键启动：MySQL8 / Redis / Nacos / Kafka(KRaft)
+# 启动: docker-compose up -d
+# 后端启动前先执行 sql/nac_ddl.sql 初始化数据库
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: nac-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: nac
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./sql/nac_ddl.sql:/docker-entrypoint-initdb.d/nac_ddl.sql:ro
+      - nac_mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: nac-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - nac_redis_data:/data
+
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    container_name: nac-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: nac-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9093,CONTROLLER://:9094
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9093
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9094
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9093:9093"
+
+volumes:
+  nac_mysql_data:
+  nac_redis_data:

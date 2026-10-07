@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.radius.mapper.RadiusAcctRecordMapper">
+
+    <insert id="insert" parameterType="com.nac.radius.entity.RadiusAcctRecord" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO radius_acct_record
+            (acct_session_id, username_mask, mac, nas_ip, status_type, session_time,
+             input_octets, output_octets, terminate_cause)
+        VALUES
+            (#{acctSessionId}, #{usernameMask}, #{mac}, #{nasIp}, #{statusType}, #{sessionTime},
+             #{inputOctets}, #{outputOctets}, #{terminateCause})
+    </insert>
+</mapper>

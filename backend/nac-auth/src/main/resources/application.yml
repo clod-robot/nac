@@ -1,0 +1,60 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: nac-auth
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB:nac}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:127.0.0.1:9093}
+    producer:
+      acks: 1
+      properties:
+        max.block.ms: 100
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+nac:
+  jwt:
+    secret: ${JWT_SECRET:NacJwtSecret@2026-Phase1-ChangeMe}
+    expire-seconds: 28800
+  crypto:
+    phone-password: ${PHONE_CRYPTO_PASSWORD:NcePhone@2026}
+  gateway:
+    trust-enabled: ${GATEWAY_TRUST_ENABLED:true}
+    internal-secret: ${NAC_INTERNAL_SECRET:NacInternal@2026-Gw2Svc}
+  sms:
+    provider: ${SMS_PROVIDER:mock}   # mock | aliyun | tencent | huawei
+    aliyun:
+      access-key-id: ${ALIYUN_SMS_AK:}
+      access-key-secret: ${ALIYUN_SMS_SK:}
+      sign-name: ${ALIYUN_SMS_SIGN:NAC准入}
+      template-code: ${ALIYUN_SMS_TEMPLATE:}
+    tencent:
+      secret-id: ${TENCENT_SMS_AK:}
+      secret-key: ${TENCENT_SMS_SK:}
+      sms-sdk-app-id: ${TENCENT_SMS_APPID:}
+      sign-name: ${TENCENT_SMS_SIGN:NAC准入}
+      template-id: ${TENCENT_SMS_TEMPLATE:}
+    huawei:
+      app-key: ${HUAWEI_SMS_AK:}
+      app-secret: ${HUAWEI_SMS_SK:}
+      sender: ${HUAWEI_SMS_SENDER:}
+      template-id: ${HUAWEI_SMS_TEMPLATE:}
+      url: ${HUAWEI_SMS_URL:https://smsapi.cn-north-4.myhuaweicloud.com:443/sms/batchSendSms/v1}
+
+logging:
+  level:
+    com.nac: INFO

@@ -1,0 +1,36 @@
+# ---- Java / Maven ----
+target/
+*.jar
+*.war
+*.original
+.mvn/wrapper/maven-wrapper.jar
+
+# ---- Node / 前端构建产物 ----
+node_modules/
+frontend/dist/
+dist/
+*.local
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- IDE / 编辑器 ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+
+# ---- 敏感配置（按需保留模板，真实密钥用环境变量注入）----
+application-local.yml
+application-local.yaml
+*.p12
+*.jks

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.auth.mapper.SmsRecordMapper">
+
+    <insert id="insert" parameterType="com.nac.auth.entity.SmsRecord" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_sms_record (phone_cipher, blind_index, biz_type, provider, status, error_msg, ip)
+        VALUES (#{phoneCipher}, #{phoneBlind}, #{bizType}, #{provider}, #{status}, #{errorMsg}, #{ip})
+    </insert>
+
+</mapper>
