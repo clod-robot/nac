@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.radius.mapper.NasMapper">
+
+    <resultMap id="n" type="com.nac.radius.entity.NasDevice">
+        <id property="id" column="id"/>
+        <result property="nasIp" column="nas_ip"/>
+        <result property="nasName" column="nas_name"/>
+        <result property="nasIdentifier" column="nas_identifier"/>
+        <result property="lastUser" column="last_user"/>
+        <result property="successCount" column="success_count"/>
+        <result property="failCount" column="fail_count"/>
+        <result property="lastSeen" column="last_seen"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <insert id="touch">
+        INSERT INTO sys_nas (nas_ip, nas_name, nas_identifier, last_user, success_count, fail_count, last_seen)
+        VALUES (#{nasIp}, CONCAT('NAS-', #{nasIp}), #{nasIdentifier}, #{lastUser}, #{success}, #{fail}, NOW())
+        ON DUPLICATE KEY UPDATE
+            nas_identifier = VALUES(nas_identifier),
+            last_user      = VALUES(last_user),
+            success_count  = success_count + VALUES(success_count),
+            fail_count     = fail_count + VALUES(fail_count),
+            last_seen      = NOW()
+    </insert>
+
+    <select id="list" resultMap="n">
+        SELECT id, nas_ip, nas_name, nas_identifier, last_user, success_count, fail_count, last_seen, create_time
+        FROM sys_nas
+        ORDER BY last_seen DESC
+        LIMIT 200
+    </select>
+
+    <update id="updateName">
+        UPDATE sys_nas SET nas_name = #{nasName} WHERE nas_ip = #{nasIp}
+    </update>
+</mapper>

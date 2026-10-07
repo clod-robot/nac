@@ -3,6 +3,7 @@ package com.nac.radius.netty;
 import com.nac.radius.config.RadiusProperties;
 import com.nac.radius.service.RadiusAcctService;
 import com.nac.radius.service.RadiusAuthService;
+import com.nac.radius.service.RadiusSecretService;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
@@ -25,14 +26,17 @@ public class RadiusServer {
     private final RadiusProperties props;
     private final RadiusAuthService authService;
     private final RadiusAcctService acctService;
+    private final RadiusSecretService secretService;
     private NioEventLoopGroup group;
     private Channel authChannel;
     private Channel acctChannel;
 
-    public RadiusServer(RadiusProperties props, RadiusAuthService authService, RadiusAcctService acctService) {
+    public RadiusServer(RadiusProperties props, RadiusAuthService authService, RadiusAcctService acctService,
+                        RadiusSecretService secretService) {
         this.props = props;
         this.authService = authService;
         this.acctService = acctService;
+        this.secretService = secretService;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -57,7 +61,7 @@ public class RadiusServer {
                 .handler(new ChannelInitializer<NioDatagramChannel>() {
                     @Override
                     protected void initChannel(NioDatagramChannel ch) {
-                        ch.pipeline().addLast(new RadiusChannelHandler(auth, authService, acctService, props));
+                        ch.pipeline().addLast(new RadiusChannelHandler(auth, authService, acctService, props, secretService));
                     }
                 });
         return b.bind(port).sync().channel();

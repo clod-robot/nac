@@ -6,6 +6,7 @@ import com.nac.radius.config.RadiusProperties;
 import com.nac.radius.entity.AuthLog;
 import com.nac.radius.entity.RadiusUser;
 import com.nac.radius.mapper.AuthLogMapper;
+import com.nac.radius.mapper.NasMapper;
 import com.nac.radius.mapper.RadiusUserMapper;
 import com.nac.radius.packet.RadiusCodes;
 import com.nac.radius.packet.RadiusCodec;
@@ -24,18 +25,23 @@ public class RadiusAuthService {
 
     private final RadiusUserMapper userMapper;
     private final AuthLogMapper authLogMapper;
+    private final NasMapper nasMapper;
     private final RedisUtil redisUtil;
     private final AesCryptoUtil aesCryptoUtil;
     private final RadiusProperties props;
+    private final RadiusSecretService secretService;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
 
-    public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, RedisUtil redisUtil,
-                             AesCryptoUtil aesCryptoUtil, RadiusProperties props) {
+    public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, NasMapper nasMapper,
+                             RedisUtil redisUtil, AesCryptoUtil aesCryptoUtil, RadiusProperties props,
+                             RadiusSecretService secretService) {
         this.userMapper = userMapper;
         this.authLogMapper = authLogMapper;
+        this.nasMapper = nasMapper;
         this.redisUtil = redisUtil;
         this.aesCryptoUtil = aesCryptoUtil;
         this.props = props;
+        this.secretService = secretService;
     }
 
     /** 处理 Access-Request，返回响应报文（Accept/Reject），异常时返回 Reject。 */
@@ -93,23 +99,39 @@ public class RadiusAuthService {
         }
         accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(username));
         recordAuth(request, 1, "认证成功");
-        log.info("RADIUS 认证成功: user={} nas={}", mask(username), request.getString(RadiusCodes.NAS_IP_ADDRESS));
+        log.info("RADIUS 认证成功: user={} nas={}", mask(username), nasIpOf(request));
         return accept;
     }
 
-    /** 写 RADIUS 认证日志，任何异常不影响认证响应 */
+    /** 写 RADIUS 认证日志，任何异常不影响认证响应；同时登记/更新来源 NAS 台账 */
     private void recordAuth(RadiusPacket request, int result, String msg) {
         try {
             AuthLog l = new AuthLog();
             l.setAuthType("radius");
-            l.setUsername(mask(request.getString(RadiusCodes.USER_NAME)));
-            l.setNasIp(request.getString(RadiusCodes.NAS_IP_ADDRESS));
+            String userMask = mask(request.getString(RadiusCodes.USER_NAME));
+            String nasIp = nasIpOf(request);
+            l.setUsername(userMask);
+            l.setNasIp(nasIp);
             l.setResult(result);
             l.setMessage(msg);
             authLogMapper.insert(l);
+            // 登记 NAS（无 IP 则跳过）
+            if (nasIp != null && !nasIp.isBlank()) {
+                nasMapper.touch(nasIp, request.getString(RadiusCodes.NAS_IDENTIFIER), userMask,
+                        result == 1 ? 1 : 0, result == 1 ? 0 : 1);
+            }
         } catch (Exception e) {
             log.warn("写 RADIUS 认证日志失败: {}", e.getMessage());
         }
+    }
+
+    /** NAS-IP-Address 为 4 字节属性，转点分十进制；解析失败回退原字符串。 */
+    private String nasIpOf(RadiusPacket request) {
+        byte[] ip = request.getAttr(RadiusCodes.NAS_IP_ADDRESS);
+        if (ip != null && ip.length == 4) {
+            return (ip[0] & 0xff) + "." + (ip[1] & 0xff) + "." + (ip[2] & 0xff) + "." + (ip[3] & 0xff);
+        }
+        return request.getString(RadiusCodes.NAS_IP_ADDRESS);
     }
 
     /** PAP：解密报文口令，与存储凭证比对；CHAP：需要可逆明文。 */
@@ -124,7 +146,7 @@ public class RadiusAuthService {
             return RadiusCodec.verifyChap(chapPwd, plain, request.getRequestAuthenticator());
         }
         if (papEnc != null) {
-            String got = RadiusCodec.decryptPapPassword(papEnc, request.getRequestAuthenticator(), props.getSharedSecret());
+            String got = RadiusCodec.decryptPapPassword(papEnc, request.getRequestAuthenticator(), secretService.getSharedSecret());
             if (got == null) return false;
             if (plain != null) return constantTimeEquals(got, plain);
             // 兜底：用 BCrypt 校验（PAP 场景）

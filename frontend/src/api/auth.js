@@ -26,6 +26,12 @@ export const getRadiusStatus = (username) => request.get('/api/auth/radius/passw
 export const setRadiusPassword = (data) => request.post('/api/auth/radius/password', data)
 export const clearRadiusPassword = (username) => request.delete('/api/auth/radius/password', { params: { username } })
 
+// NAS 管理（admin）：共享密钥 + NAS 设备台账
+export const getNasSecret = () => request.get('/api/auth/nas/secret')
+export const setNasSecret = (data) => request.put('/api/auth/nas/secret', data)
+export const listNas = () => request.get('/api/auth/nas/list')
+export const renameNas = (data) => request.put('/api/auth/nas/name', data)
+
 // 账号管理（admin）
 export const userList = (params) => request.get('/api/auth/admin/users/list', { params })
 export const userCreate = (data) => request.post('/api/auth/admin/users', data)

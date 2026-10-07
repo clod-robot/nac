@@ -59,6 +59,15 @@ public class RedisUtil {
         }
     }
 
+    /** 持久化写入（无过期），用于共享密钥等需长期保存的配置。 */
+    public void set(String key, String value) {
+        try {
+            redisTemplate.opsForValue().set(key, value);
+        } catch (Exception e) {
+            log.warn("Redis set 失败: {}", key, e);
+        }
+    }
+
     public String get(String key) {
         try {
             return redisTemplate.opsForValue().get(key);

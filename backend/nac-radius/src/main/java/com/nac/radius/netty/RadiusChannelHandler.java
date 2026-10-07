@@ -6,6 +6,7 @@ import com.nac.radius.packet.RadiusCodes;
 import com.nac.radius.packet.RadiusPacket;
 import com.nac.radius.service.RadiusAcctService;
 import com.nac.radius.service.RadiusAuthService;
+import com.nac.radius.service.RadiusSecretService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -24,13 +25,16 @@ public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPa
     private final RadiusAuthService authService;
     private final RadiusAcctService acctService;
     private final RadiusProperties props;
+    private final RadiusSecretService secretService;
 
     public RadiusChannelHandler(boolean authPort, RadiusAuthService authService,
-                                RadiusAcctService acctService, RadiusProperties props) {
+                                RadiusAcctService acctService, RadiusProperties props,
+                                RadiusSecretService secretService) {
         this.authPort = authPort;
         this.authService = authService;
         this.acctService = acctService;
         this.props = props;
+        this.secretService = secretService;
     }
 
     @Override
@@ -59,7 +63,7 @@ public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPa
 
         if (response == null) return; // 非期望类型，静默丢弃
 
-        byte[] out = RadiusCodec.encodeResponse(response, request.getRequestAuthenticator(), props.getSharedSecret());
+        byte[] out = RadiusCodec.encodeResponse(response, request.getRequestAuthenticator(), secretService.getSharedSecret());
         ctx.writeAndFlush(new DatagramPacket(Unpooled.wrappedBuffer(out), msg.sender()));
     }
 

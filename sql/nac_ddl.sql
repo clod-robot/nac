@@ -138,6 +138,22 @@ CREATE TABLE IF NOT EXISTS sys_auth_log (
     KEY idx_create_time (create_time)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='认证日志';
 
+-- NAS 设备台账：RADIUS 认证来源设备自动登记，统计认证成功/失败次数（等保审计留痕）
+CREATE TABLE IF NOT EXISTS sys_nas (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    nas_ip        VARCHAR(64)  NOT NULL COMMENT 'NAS设备IP',
+    nas_name      VARCHAR(64)           DEFAULT NULL COMMENT 'NAS设备名称（可编辑）',
+    nas_identifier VARCHAR(128)         DEFAULT NULL COMMENT 'NAS-Identifier 属性',
+    last_user     VARCHAR(64)           DEFAULT NULL COMMENT '最近认证账号（脱敏）',
+    success_count BIGINT       NOT NULL DEFAULT 0 COMMENT '认证成功次数',
+    fail_count    BIGINT       NOT NULL DEFAULT 0 COMMENT '认证失败次数',
+    last_seen     DATETIME              DEFAULT NULL COMMENT '最近认证时间',
+    create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_nas_ip (nas_ip),
+    KEY idx_last_seen (last_seen)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='NAS设备台账';
+
 -- 角色种子数据（admin 账号由 nac-auth 启动初始化器保证存在，密码 BCrypt）
 INSERT INTO sys_role (role_code, role_name, description)
 SELECT 'admin', '超级管理员', '系统管理员'
