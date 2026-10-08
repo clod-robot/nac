@@ -89,6 +89,9 @@
         <el-form-item label="使用人(姓名)" required>
           <el-input v-model="adminRealName" placeholder="请填写实际领用人姓名" />
         </el-form-item>
+        <el-form-item label="联系电话">
+          <el-input v-model="adminPhone" placeholder="用于短信登录/找回密码（选填）" maxlength="15" />
+        </el-form-item>
         <el-form-item label="新密码"><el-input v-model="newPwd" type="password" show-password placeholder="至少 6 位，请勿再用 admin123" /></el-form-item>
         <el-form-item label="确认密码"><el-input v-model="newPwd2" type="password" show-password placeholder="再次输入新密码" @keyup.enter="submitForcePwd" /></el-form-item>
       </el-form>
@@ -121,6 +124,7 @@ const newPwd2 = ref('')
 const forceSaving = ref(false)
 const adminDept = ref('')
 const adminRealName = ref('')
+const adminPhone = ref('')
 
 // 服务器时间（按服务器时区实时走时）与 NTP
 const clock = ref('--')
@@ -177,10 +181,11 @@ async function submitForcePwd() {
   if (!newPwd.value || newPwd.value.length < 6) { ElMessage.warning('新密码至少 6 位'); return }
   if (newPwd.value === 'admin123') { ElMessage.warning('不能继续使用默认密码 admin123'); return }
   if (newPwd.value !== newPwd2.value) { ElMessage.warning('两次输入的密码不一致'); return }
+  if (adminPhone.value.trim() && !/^\d{6,15}$/.test(adminPhone.value.trim())) { ElMessage.warning('联系电话格式不正确'); return }
   forceSaving.value = true
   try {
-    // 1) 设置管理员账号归属（部门 + 使用人）
-    await userUpdateProfile({ id: store.userId, dept: adminDept.value.trim(), realName: adminRealName.value.trim() })
+    // 1) 设置管理员账号归属（部门 + 使用人 + 联系电话）
+    await userUpdateProfile({ id: store.userId, dept: adminDept.value.trim(), realName: adminRealName.value.trim(), phone: adminPhone.value.trim() || undefined })
     // 2) 修改默认密码
     await userResetPassword({ id: store.userId, password: newPwd.value })
     store.clearMustChangePwd()
