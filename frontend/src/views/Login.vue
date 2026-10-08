@@ -6,10 +6,10 @@
         <el-tab-pane label="账号登录" name="pwd">
           <el-form :model="form" label-width="0" @keyup.enter="onLogin">
             <el-form-item>
-              <el-input v-model="form.username" placeholder="用户名" prefix-icon="User" />
+              <el-input v-model="form.username" placeholder="用户名" :prefix-icon="User" />
             </el-form-item>
             <el-form-item>
-              <el-input v-model="form.password" type="password" placeholder="密码" prefix-icon="Lock" show-password />
+              <el-input v-model="form.password" type="password" placeholder="密码" :prefix-icon="Lock" show-password />
             </el-form-item>
             <el-form-item>
               <div class="cap-row">
@@ -48,6 +48,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { User, Lock } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCaptcha, login, sendSms, smsLogin } from '../api/auth'
