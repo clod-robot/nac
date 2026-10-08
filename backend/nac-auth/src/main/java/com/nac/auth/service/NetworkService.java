@@ -65,8 +65,10 @@ public class NetworkService {
     }
 
     public List<NetInterface> listInterfaces() {
-        Map<String, String> gwByDev = parseGateways();
-        String globalGw = gwByDev.remove("__global__");
+        Map<String, String> v4Gw = parseGateways("4");
+        String v4Global = v4Gw.remove("__global__");
+        Map<String, String> v6Gw = parseGateways("6");
+        String v6Global = v6Gw.remove("__global__");
         Map<String, List<String>> dnsByDev = parseDns();
         List<String> globalDns = dnsByDev.remove("__global__");
 
@@ -110,7 +112,10 @@ public class NetworkService {
                         }
                     }
                 }
-                ni.setGateway(gwByDev.getOrDefault(name, globalGw));
+                // 网关按协议族一一对应，没有该族默认路由则为 null
+                ni.setIpv4Gateway(v4Gw.getOrDefault(name, v4Global));
+                ni.setIpv6Gateway(v6Gw.getOrDefault(name, v6Global));
+                ni.setGateway(ni.getIpv4Gateway()); // 兼容编辑表单（仅 IPv4）
                 // 按地址族拆分 DNS：v4 表只显示 IPv4 服务器，v6 表只显示 IPv6 服务器，没有则为空
                 List<String> dns = dnsByDev.get(name);
                 if (dns != null && !dns.isEmpty()) {
@@ -171,14 +176,17 @@ public class NetworkService {
         }
     }
 
-    private Map<String, String> parseGateways() {
+    /** 解析指定协议族(family: "4"/"6")的默认路由，按 dev 归类；无族默认路由则返回空映射。 */
+    private Map<String, String> parseGateways(String family) {
         Map<String, String> map = new HashMap<>();
         try {
-            String json = run(IP, "-json", "route");
+            String json = run(IP, "-" + family, "-json", "route");
             JSONArray arr = JSON.parseArray(json);
+            if (arr == null) return map;
             for (int i = 0; i < arr.size(); i++) {
                 JSONObject o = arr.getJSONObject(i);
                 String dst = o.getString("dst");
+                // 默认路由：dst 为 default（部分输出缺省 dst 也表示默认）
                 if (dst != null && !"default".equals(dst)) continue;
                 String gw = o.getString("gateway");
                 String dev = o.getString("dev");
@@ -187,7 +195,7 @@ public class NetworkService {
                 map.putIfAbsent("__global__", gw);
             }
         } catch (Exception e) {
-            log.warn("解析网关失败", e);
+            log.warn("解析 {} 网关失败", "IPv" + family, e);
         }
         return map;
     }

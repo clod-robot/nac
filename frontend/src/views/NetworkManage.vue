@@ -26,7 +26,7 @@
             <div class="net-cell">
               <div>ipv4地址：{{ row.ipv4?.address || '-' }}</div>
               <div>掩码：{{ row.ipv4 ? (row.ipv4.mask + ' /' + row.ipv4.prefix) : '-' }}</div>
-              <div>网关：{{ row.gateway || '-' }}</div>
+              <div>网关：{{ row.ipv4Gateway || '-' }}</div>
               <div>主dns：{{ row.dns1 || '-' }}</div>
               <div>备dns：{{ row.dns2 || '-' }}</div>
             </div>
@@ -37,7 +37,7 @@
             <div class="net-cell">
               <div>ipv6地址：{{ row.ipv6?.address || '-' }}</div>
               <div>前缀：{{ row.ipv6?.prefix ?? '-' }}</div>
-              <div>网关：{{ row.gateway || '-' }}</div>
+              <div>网关：{{ row.ipv6Gateway || '-' }}</div>
               <div>主dns：{{ row.ipv6Dns1 || '-' }}</div>
               <div>备dns：{{ row.ipv6Dns2 || '-' }}</div>
             </div>

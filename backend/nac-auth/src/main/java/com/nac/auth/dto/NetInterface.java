@@ -14,7 +14,11 @@ public class NetInterface {
     private int mtu;
     private IpInfo ipv4;
     private IpInfo ipv6;
+    /** 默认网关（IPv4，兼容编辑表单） */
     private String gateway;
+    /** 按协议族区分的网关，一一对应；无则为 null */
+    private String ipv4Gateway;
+    private String ipv6Gateway;
     private String dns1;
     private String dns2;
     private String ipv6Dns1;
