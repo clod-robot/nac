@@ -14,9 +14,12 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.DatagramPacket;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.concurrent.ExecutorService;
+
 /**
  * UDP 报文处理器：解析 -> 认证/计费分发 -> 编码响应 -> 回包。
  * 单例无状态（依赖不可变服务），可被多端口共享。
+ * 认证/计费等重活（BCrypt/DB/Kafka）提交到独立业务线程池，避免 UDP 单通道被 IO 线程串行化。
  */
 @Slf4j
 public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPacket> {
@@ -26,15 +29,17 @@ public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPa
     private final RadiusAcctService acctService;
     private final RadiusProperties props;
     private final RadiusSecretService secretService;
+    private final ExecutorService bizExecutor;
 
     public RadiusChannelHandler(boolean authPort, RadiusAuthService authService,
                                 RadiusAcctService acctService, RadiusProperties props,
-                                RadiusSecretService secretService) {
+                                RadiusSecretService secretService, ExecutorService bizExecutor) {
         this.authPort = authPort;
         this.authService = authService;
         this.acctService = acctService;
         this.props = props;
         this.secretService = secretService;
+        this.bizExecutor = bizExecutor;
     }
 
     @Override
@@ -50,6 +55,16 @@ public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPa
         }
         request.setSender(msg.sender());
 
+        // 重活异步化：业务线程池处理，IO 线程立即回收以承接后续报文
+        try {
+            bizExecutor.execute(() -> handleAndReply(ctx, msg, request));
+        } catch (java.util.concurrent.RejectedExecutionException re) {
+            // 队列已满（洪泛/过载）：丢弃，防止 OOM；客户端按 RADIUS 机制会重试
+            log.warn("RADIUS 业务队列已满，丢弃请求: from={}", msg.sender());
+        }
+    }
+
+    private void handleAndReply(ChannelHandlerContext ctx, DatagramPacket msg, RadiusPacket request) {
         RadiusPacket response = null;
         try {
             if (authPort && request.getCode() == RadiusCodes.ACCESS_REQUEST) {
@@ -64,6 +79,7 @@ public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPa
         if (response == null) return; // 非期望类型，静默丢弃
 
         byte[] out = RadiusCodec.encodeResponse(response, request.getRequestAuthenticator(), secretService.getSharedSecret());
+        // 从非 IO 线程写回是安全的：Netty 会把写操作投递到对应 event loop
         ctx.writeAndFlush(new DatagramPacket(Unpooled.wrappedBuffer(out), msg.sender()));
     }
 

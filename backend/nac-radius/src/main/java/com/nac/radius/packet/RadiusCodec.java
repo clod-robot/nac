@@ -5,6 +5,8 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * RADIUS 编解码与密码学工具（RFC 2865 5.2 / RFC 2865 3）。
@@ -54,7 +56,32 @@ public final class RadiusCodec {
         System.arraycopy(attrs, 0, out, 20, attrs.length);
         byte[] ra = md5(concat(out, sharedSecret.getBytes(StandardCharsets.UTF_8)));
         System.arraycopy(ra, 0, out, 4, AUTH_LEN);
+        // 若包含 Message-Authenticator(80) 占位（16 字节 0），按 RFC 3579 计算 HMAC-MD5 回填
+        fillMessageAuthenticator(out, sharedSecret);
         return out;
+    }
+
+    /** 在已填充 Response-Authenticator 的报文上计算并回填 Message-Authenticator（HMAC-MD5）。 */
+    private static void fillMessageAuthenticator(byte[] out, String sharedSecret) {
+        int off = RadiusCodes.HEADER_LEN;
+        while (off + 2 <= out.length) {
+            int type = out[off] & 0xFF;
+            int alen = out[off + 1] & 0xFF;
+            if (alen < 2 || off + alen > out.length) break;
+            if (type == RadiusCodes.MESSAGE_AUTHENTICATOR && alen == 18) {
+                // 占位需为 16 字节 0；计算时其位置保持 0
+                try {
+                    Mac mac = Mac.getInstance("HmacMD5");
+                    mac.init(new SecretKeySpec(sharedSecret.getBytes(StandardCharsets.UTF_8), "HmacMD5"));
+                    byte[] hmac = mac.doFinal(out);
+                    System.arraycopy(hmac, 0, out, off + 2, 16);
+                } catch (Exception e) {
+                    throw new IllegalStateException("HmacMD5 unavailable", e);
+                }
+                return;
+            }
+            off += alen;
+        }
     }
 
     private static byte[] encodeAttributes(RadiusPacket pkt) {

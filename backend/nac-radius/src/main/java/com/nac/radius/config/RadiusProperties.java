@@ -20,6 +20,10 @@ public class RadiusProperties {
     private String sharedSecret = "NacRadius@2026";
     /** Netty boss/worker 线程数（UDP 单事件循环组，0=CPU 核数*2） */
     private int workerThreads = 0;
+    /** 认证/计费业务处理线程池大小（BCrypt/DB 等重活从 IO 线程卸出，避免单通道串行瓶颈），0=CPU 核数*2 */
+    private int bizThreads = 0;
+    /** 业务线程池等待队列容量，满则丢弃新请求（防 OOM/洪泛） */
+    private int bizQueueCapacity = 2000;
     /** 单用户认证失败锁定阈值（防爆破），超过则该用户 N 秒内拒绝 */
     private int failLockThreshold = 5;
     /** 锁定时长秒 */

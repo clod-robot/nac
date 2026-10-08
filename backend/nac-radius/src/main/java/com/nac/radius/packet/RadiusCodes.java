@@ -45,9 +45,20 @@ public final class RadiusCodes {
     /** 认证响应属性 */
     public static final int REPLY_MESSAGE = 18;
     public static final int SESSION_TIMEOUT = 27;
+    public static final int STATE = 24; // EAP 挑战态，NAS 原样回传
+    public static final int EAP_MESSAGE = 79; // 802.1X EAP 载荷
+    public static final int MESSAGE_AUTHENTICATOR = 80; // EAP 报文完整性（HMAC-MD5）
     public static final int TUNNEL_TYPE = 64;
     public static final int TUNNEL_MEDIUM_TYPE = 65;
     public static final int TUNNEL_PRIVATE_GROUP_ID = 81; // VLAN
+
+    /** EAP 协议（RFC 3748） */
+    public static final int EAP_REQUEST = 1;
+    public static final int EAP_RESPONSE = 2;
+    public static final int EAP_SUCCESS = 3;
+    public static final int EAP_FAILURE = 4;
+    public static final int EAP_TYPE_IDENTITY = 1;
+    public static final int EAP_TYPE_MD5 = 4;
 
     public static final int HEADER_LEN = 20; // code(1)+id(1)+length(2)+auth(16)
 }

@@ -17,6 +17,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +42,7 @@ public class RadiusAuthService {
     private final ExemptTerminalMapper exemptMapper;
     private final SyslogForwarder syslogForwarder;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, NasMapper nasMapper,
                              RedisUtil redisUtil, AesCryptoUtil aesCryptoUtil, RadiusProperties props,
@@ -105,6 +110,11 @@ public class RadiusAuthService {
             return reject;
         }
 
+        // 802.1X：请求携带 EAP-Message 时走 EAP 状态机（当前实现 EAP-MD5，RFC 3748/2869）
+        if (request.getAttr(RadiusCodes.EAP_MESSAGE) != null) {
+            return handleEap(request, user);
+        }
+
         boolean ok = verify(request, user);
         if (!ok) {
             registerFailure(username);
@@ -128,6 +138,114 @@ public class RadiusAuthService {
         recordAuth(request, 1, "认证成功");
         log.info("RADIUS 认证成功: user={} nas={}", mask(username), nasIpOf(request));
         return accept;
+    }
+
+    /**
+     * 802.1X EAP 状态机：仅实现 EAP-MD5。
+     * Identity -> 下发 MD5 挑战(Access-Challenge + State)；MD5-Challenge 响应 -> 校验后 Accept/Reject。
+     * 挑战随 State 属性无状态回传（NAS 原样带回），无需服务端会话存储。
+     */
+    private RadiusPacket handleEap(RadiusPacket request, RadiusUser user) {
+        byte[] eap = concatEap(request);
+        if (eap == null || eap.length < 4) return eapReject(request, user, "malformed eap", 0);
+        int code = eap[0] & 0xFF;
+        int id = eap[1] & 0xFF;
+        int len = ((eap[2] & 0xFF) << 8) | (eap[3] & 0xFF);
+        if (len < 4 || len > eap.length) return eapReject(request, user, "bad eap length", id);
+        int type = (code == RadiusCodes.EAP_REQUEST || code == RadiusCodes.EAP_RESPONSE) && eap.length >= 5 ? (eap[4] & 0xFF) : -1;
+
+        // Response/Identity -> 下发 EAP-Request/MD5-Challenge
+        if (code == RadiusCodes.EAP_RESPONSE && type == RadiusCodes.EAP_TYPE_IDENTITY) {
+            byte[] challenge = new byte[16];
+            SECURE_RANDOM.nextBytes(challenge);
+            int chalId = (id + 1) & 0xFF;
+            byte[] eapReq = new byte[4 + 1 + 1 + 16]; // EAP header + type + valueSize + challenge
+            eapReq[0] = (byte) RadiusCodes.EAP_REQUEST;
+            eapReq[1] = (byte) chalId;
+            eapReq[2] = (byte) (eapReq.length >>> 8);
+            eapReq[3] = (byte) eapReq.length;
+            eapReq[4] = (byte) RadiusCodes.EAP_TYPE_MD5;
+            eapReq[5] = 16;
+            System.arraycopy(challenge, 0, eapReq, 6, 16);
+            RadiusPacket ch = new RadiusPacket(RadiusCodes.ACCESS_CHALLENGE, request.getIdentifier(), null);
+            ch.addAttribute(RadiusCodes.EAP_MESSAGE, eapReq);
+            ch.addAttribute(RadiusCodes.STATE, challenge);
+            ch.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+            return ch;
+        }
+
+        // Response/MD5-Challenge -> 校验 response == MD5(eapId + password + challenge)
+        if (code == RadiusCodes.EAP_RESPONSE && type == RadiusCodes.EAP_TYPE_MD5) {
+            byte[] state = request.getAttr(RadiusCodes.STATE);
+            if (state == null || state.length < 16) return eapReject(request, user, "missing state", id);
+            byte[] challenge = Arrays.copyOf(state, 16);
+            int valueSize = eap[5] & 0xFF;
+            if (valueSize != 16 || eap.length < 22) return eapReject(request, user, "bad md5 response", id);
+            byte[] resp = Arrays.copyOfRange(eap, 6, 22);
+            String plain = resolvePlainPassword(user);
+            if (plain == null) return eapReject(request, user, "no reversible password", id);
+            byte[] pw = plain.getBytes(StandardCharsets.UTF_8);
+            byte[] buf = new byte[1 + pw.length + 16];
+            buf[0] = (byte) id;
+            System.arraycopy(pw, 0, buf, 1, pw.length);
+            System.arraycopy(challenge, 0, buf, 1 + pw.length, 16);
+            if (!MessageDigest.isEqual(RadiusCodec.md5(buf), resp)) {
+                registerFailure(user.getUsername());
+                log.info("RADIUS EAP-MD5 认证失败: user={}", mask(user.getUsername()));
+                return eapReject(request, user, "invalid credentials", id);
+            }
+            clearFailures(user.getUsername());
+            RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
+            accept.addAttribute(RadiusCodes.EAP_MESSAGE, eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
+            accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
+            if (props.getVlanId() > 0) {
+                accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
+                accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);
+                accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
+            }
+            accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(user.getUsername()));
+            accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+            recordAuth(request, 1, "EAP-MD5 认证成功");
+            log.info("RADIUS EAP-MD5 认证成功: user={} nas={}", mask(user.getUsername()), nasIpOf(request));
+            return accept;
+        }
+
+        return eapReject(request, user, "unsupported eap method", id);
+    }
+
+    /** 拼接请求中所有 EAP-Message 属性（跨属性分片）为一个 EAP 报文。 */
+    private byte[] concatEap(RadiusPacket request) {
+        List<byte[]> parts = request.getAttributes().get(RadiusCodes.EAP_MESSAGE);
+        if (parts == null || parts.isEmpty()) return null;
+        if (parts.size() == 1) return parts.get(0);
+        int total = 0;
+        for (byte[] p : parts) total += p.length;
+        byte[] out = new byte[total];
+        int off = 0;
+        for (byte[] p : parts) { System.arraycopy(p, 0, out, off, p.length); off += p.length; }
+        return out;
+    }
+
+    /** 构造 EAP 报文：code/id/length/[type+data]。data 为 null 表示 Success/Failure（无 type 字段）。 */
+    private byte[] eapPacket(int code, int id, byte[] data) {
+        int len = 4 + (data == null ? 0 : data.length);
+        byte[] out = new byte[len];
+        out[0] = (byte) code;
+        out[1] = (byte) id;
+        out[2] = (byte) (len >>> 8);
+        out[3] = (byte) len;
+        if (data != null) System.arraycopy(data, 0, out, 4, data.length);
+        return out;
+    }
+
+    /** 构造带 EAP-Failure 与 Message-Authenticator 的拒绝响应。 */
+    private RadiusPacket eapReject(RadiusPacket request, RadiusUser user, String msg, int eapId) {
+        RadiusPacket reject = new RadiusPacket(RadiusCodes.ACCESS_REJECT, request.getIdentifier(), null);
+        reject.addAttribute(RadiusCodes.EAP_MESSAGE, eapPacket(RadiusCodes.EAP_FAILURE, eapId, null));
+        reject.addString(RadiusCodes.REPLY_MESSAGE, msg);
+        reject.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+        recordAuth(request, 0, "EAP: " + msg);
+        return reject;
     }
 
     /** 写 RADIUS 认证日志，任何异常不影响认证响应；同时登记/更新来源 NAS 台账 */

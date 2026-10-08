@@ -24,6 +24,10 @@ spring:
     producer:
       retries: 1
       acks: 1
+      properties:
+        # broker/topic 不可用时 100ms 快速失败，严禁阻塞 RADIUS 响应线程（默认 60s 会拖垮认证/计费）
+        max.block.ms: 100
+        delivery.timeout.ms: 2000
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml

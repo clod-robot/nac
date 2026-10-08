@@ -8,8 +8,8 @@
         ON DUPLICATE KEY UPDATE
             username_mask = VALUES(username_mask),
             mac = VALUES(mac),
-            nas_ip = VALUES(nasIp),
-            framed_ip = VALUES(framedIp),
+            nas_ip = VALUES(nas_ip),
+            framed_ip = VALUES(framed_ip),
             vlan_id = VALUES(vlan_id),
             status = 1
     </insert>
