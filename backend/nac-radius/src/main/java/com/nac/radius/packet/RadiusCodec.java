@@ -63,25 +63,49 @@ public final class RadiusCodec {
 
     /** 在已填充 Response-Authenticator 的报文上计算并回填 Message-Authenticator（HMAC-MD5）。 */
     private static void fillMessageAuthenticator(byte[] out, String sharedSecret) {
+        int maOff = findMessageAuthenticator(out);
+        if (maOff < 0) return;
+        try {
+            Mac mac = Mac.getInstance("HmacMD5");
+            mac.init(new SecretKeySpec(sharedSecret.getBytes(StandardCharsets.UTF_8), "HmacMD5"));
+            byte[] hmac = mac.doFinal(out); // 此时 MA 占位为 16 字节 0
+            System.arraycopy(hmac, 0, out, maOff, 16);
+        } catch (Exception e) {
+            throw new IllegalStateException("HmacMD5 unavailable", e);
+        }
+    }
+
+    /**
+     * 校验请求报文的 Message-Authenticator（RFC 3579）：
+     * HMAC-MD5(secret, 整包且 MA 字段置零) 必须与报文中的 MA 一致。
+     * 报文不含 MA 时返回 false（对 EAP 报文即视为非法，应丢弃）。
+     */
+    public static boolean verifyMessageAuthenticator(byte[] packet, String sharedSecret) {
+        int maOff = findMessageAuthenticator(packet);
+        if (maOff < 0) return false;
+        byte[] copy = packet.clone();
+        Arrays.fill(copy, maOff, maOff + 16, (byte) 0); // MA 置零参与计算
+        try {
+            Mac mac = Mac.getInstance("HmacMD5");
+            mac.init(new SecretKeySpec(sharedSecret.getBytes(StandardCharsets.UTF_8), "HmacMD5"));
+            byte[] expect = mac.doFinal(copy);
+            return MessageDigest.isEqual(expect, Arrays.copyOfRange(packet, maOff, maOff + 16));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** 定位长度为 18 的 Message-Authenticator(80) 属性值起始偏移，不存在返回 -1。 */
+    private static int findMessageAuthenticator(byte[] packet) {
         int off = RadiusCodes.HEADER_LEN;
-        while (off + 2 <= out.length) {
-            int type = out[off] & 0xFF;
-            int alen = out[off + 1] & 0xFF;
-            if (alen < 2 || off + alen > out.length) break;
-            if (type == RadiusCodes.MESSAGE_AUTHENTICATOR && alen == 18) {
-                // 占位需为 16 字节 0；计算时其位置保持 0
-                try {
-                    Mac mac = Mac.getInstance("HmacMD5");
-                    mac.init(new SecretKeySpec(sharedSecret.getBytes(StandardCharsets.UTF_8), "HmacMD5"));
-                    byte[] hmac = mac.doFinal(out);
-                    System.arraycopy(hmac, 0, out, off + 2, 16);
-                } catch (Exception e) {
-                    throw new IllegalStateException("HmacMD5 unavailable", e);
-                }
-                return;
-            }
+        while (off + 2 <= packet.length) {
+            int type = packet[off] & 0xFF;
+            int alen = packet[off + 1] & 0xFF;
+            if (alen < 2 || off + alen > packet.length) return -1;
+            if (type == RadiusCodes.MESSAGE_AUTHENTICATOR && alen == 18) return off + 2;
             off += alen;
         }
+        return -1;
     }
 
     private static byte[] encodeAttributes(RadiusPacket pkt) {
