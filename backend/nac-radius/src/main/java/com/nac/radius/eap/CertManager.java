@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
@@ -15,9 +17,6 @@ import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.bouncycastle.pkcs.PKCS10CertificationRequest;
-import org.bouncycastle.pkcs.PKCS10CertificationRequestBuilder;
-import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +26,9 @@ import javax.net.ssl.TrustManagerFactory;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.math.BigInteger;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -38,7 +40,11 @@ import java.security.SecureRandom;
 import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 
 /**
  * 802.1X EAP-TLS/PEAP 证书管理：NAC 自签 CA，启动时生成/加载服务端证书，
@@ -77,30 +83,46 @@ public class CertManager {
         Path srvCertPath = dir.resolve("server.pem");
         Path srvKeyPath = dir.resolve("server-key.pem");
 
-        if (Files.exists(caCertPath) && Files.exists(caKeyPath) && Files.exists(srvCertPath) && Files.exists(srvKeyPath)) {
+        // 1) CA 保持稳定：存在则加载，否则生成（终端只需安装信任一次）
+        if (Files.exists(caCertPath) && Files.exists(caKeyPath)) {
             this.caCert = readCert(Files.readString(caCertPath));
             this.caKey = readKey(Files.readString(caKeyPath));
+            log.info("802.1X TLS CA 已加载: {}", caCertPath);
+        } else {
+            KeyPair caKp = genRsa();
+            X500Name caSubject = new X500Name("CN=NAC 802.1X Root CA,O=NAC,C=CN");
+            this.caCert = buildCert(caSubject, caKp.getPublic(), caSubject, caKp.getPrivate(), true, 3650, null);
+            this.caKey = caKp.getPrivate();
+            Files.writeString(caCertPath, toPem(caCert));
+            Files.writeString(caKeyPath, toPem(caKey));
+            log.info("802.1X 自签 CA 已生成: {}", caCertPath);
+        }
+
+        // 2) 服务端证书：SAN 绑定主网口 IP；IP 变化则用既有 CA 重签
+        String ip = detectPrimaryIp();
+        boolean reuse = Files.exists(srvCertPath) && Files.exists(srvKeyPath);
+        if (reuse) {
+            X509Certificate existing = readCert(Files.readString(srvCertPath));
+            if (!certHasSanIp(existing, ip)) {
+                log.info("802.1X 网口 IP 变更(证书 SAN 不含 {})，重签服务端证书", ip);
+                reuse = false;
+            }
+        }
+        if (reuse) {
             this.serverCert = readCert(Files.readString(srvCertPath));
             this.serverKey = readKey(Files.readString(srvKeyPath));
-            log.info("802.1X TLS 证书已加载: {}", dir);
-            return;
+            log.info("802.1X 服务端证书已加载: SAN IP={}", ip);
+        } else {
+            KeyPair srvKp = genRsa();
+            X500Name srvSubject = new X500Name("CN=NAC RADIUS 802.1X Server,O=NAC,C=CN");
+            List<String> sanIps = ip == null ? Collections.emptyList() : List.of(ip);
+            X500Name issuer = X500Name.getInstance(caCert.getSubjectX500Principal().getEncoded());
+            this.serverCert = buildCert(srvSubject, srvKp.getPublic(), issuer, caKey, false, 825, sanIps);
+            this.serverKey = srvKp.getPrivate();
+            Files.writeString(srvCertPath, toPem(serverCert));
+            Files.writeString(srvKeyPath, toPem(serverKey));
+            log.info("802.1X 服务端证书已生成: SAN IP={}", ip);
         }
-        // 生成自签 CA
-        KeyPair caKp = genRsa();
-        X500Name caSubject = new X500Name("CN=NAC 802.1X Root CA,O=NAC,C=CN");
-        this.caCert = buildCert(caSubject, caKp.getPublic(), caSubject, caKp.getPrivate(), true, 3650);
-        this.caKey = caKp.getPrivate();
-        // 生成服务端证书（由 CA 签发）
-        KeyPair srvKp = genRsa();
-        X500Name srvSubject = new X500Name("CN=NAC RADIUS 802.1X Server,O=NAC,C=CN");
-        this.serverCert = buildCert(srvSubject, srvKp.getPublic(), caSubject, caKp.getPrivate(), false, 825);
-        this.serverKey = srvKp.getPrivate();
-
-        Files.writeString(caCertPath, toPem(caCert));
-        Files.writeString(caKeyPath, toPem(caKey));
-        Files.writeString(srvCertPath, toPem(serverCert));
-        Files.writeString(srvKeyPath, toPem(serverKey));
-        log.info("802.1X 自签 CA 与服务端证书已生成: {}", dir);
     }
 
     /** CA 证书 PEM（供终端下载安装信任）。 */
@@ -131,7 +153,7 @@ public class CertManager {
     public String signClientCert(PublicKey publicKey, String cn) throws Exception {
         X500Name subject = new X500Name("CN=" + cn + ",O=NAC,C=CN");
         X500Name issuer = new X500Name(caCert.getSubjectX500Principal().getName());
-        X509Certificate c = buildCert(subject, publicKey, issuer, caKey, false, 825);
+        X509Certificate c = buildCert(subject, publicKey, issuer, caKey, false, 825, null);
         return toPem(c);
     }
 
@@ -142,8 +164,51 @@ public class CertManager {
         return g.generateKeyPair();
     }
 
+    /** 探测主网口 IPv4：优先私网地址(10/172.16-31/192.168)，排除回环/虚拟/docker/网桥。 */
+    static String detectPrimaryIp() {
+        String fallback = null;
+        try {
+            for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!ni.isUp() || ni.isLoopback() || ni.isVirtual()) continue;
+                String name = ni.getName().toLowerCase();
+                if (name.startsWith("docker") || name.startsWith("veth") || name.startsWith("br-")
+                        || name.startsWith("virbr") || name.startsWith("cni") || name.startsWith("lo")) continue;
+                for (InetAddress addr : Collections.list(ni.getInetAddresses())) {
+                    if (!(addr instanceof Inet4Address) || addr.isLoopbackAddress()) continue;
+                    String ip = addr.getHostAddress();
+                    if (addr.isSiteLocalAddress()) return ip; // 私网优先直接返回
+                    if (fallback == null) fallback = ip;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("探测网口 IP 失败: {}", e.getMessage());
+        }
+        return fallback; // 无非私网时取首个公网 IPv4；都没有则 null
+    }
+
+    /** 校验证书 SAN(iPAddress) 是否包含目标 IP。 */
+    private static boolean certHasSanIp(X509Certificate cert, String ip) {
+        if (ip == null) return true;
+        try {
+            Collection<List<?>> sans = cert.getSubjectAlternativeNames();
+            if (sans == null) return false;
+            for (List<?> san : sans) {
+                if (san.size() < 2) continue;
+                int type = ((Number) san.get(0)).intValue();
+                if (type == 7) { // iPAddress
+                    Object v = san.get(1);
+                    String s = v instanceof byte[] b ? InetAddress.getByAddress(b).getHostAddress() : String.valueOf(v);
+                    if (ip.equals(s)) return true;
+                }
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return false;
+    }
+
     private X509Certificate buildCert(X500Name subject, PublicKey pub, X500Name issuer, PrivateKey issuerKey,
-                                      boolean isCa, int days) throws Exception {
+                                      boolean isCa, int days, List<String> sanIps) throws Exception {
         long now = System.currentTimeMillis();
         BigInteger serial = BigInteger.valueOf(now).abs();
         Date notBefore = new Date(now - DAY);
@@ -155,6 +220,11 @@ public class CertManager {
         } else {
             b.addExtension(Extension.basicConstraints, false, new BasicConstraints(false));
             b.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
+        }
+        if (sanIps != null && !sanIps.isEmpty()) {
+            List<GeneralName> names = new ArrayList<>();
+            for (String ip : sanIps) names.add(new GeneralName(GeneralName.iPAddress, ip));
+            b.addExtension(Extension.subjectAlternativeName, false, new GeneralNames(names.toArray(new GeneralName[0])));
         }
         ContentSigner signer = new JcaContentSignerBuilder(SIG_ALG).setProvider("BC").build(issuerKey);
         X509CertificateHolder holder = b.build(signer);
@@ -185,14 +255,5 @@ public class CertManager {
             if (o instanceof org.bouncycastle.asn1.pkcs.PrivateKeyInfo info) return conv.getPrivateKey(info);
             throw new IllegalStateException("PEM 中无私钥: " + (o == null ? "null" : o.getClass()));
         }
-    }
-
-    /** 生成 PKCS#10 CSR（占位保留，供后续接口化签发使用）。 */
-    @SuppressWarnings("unused")
-    private PKCS10CertificationRequest csr(KeyPair kp, String cn) throws Exception {
-        PKCS10CertificationRequestBuilder b = new JcaPKCS10CertificationRequestBuilder(
-                new X500Name("CN=" + cn), kp.getPublic());
-        ContentSigner signer = new JcaContentSignerBuilder(SIG_ALG).setProvider("BC").build(kp.getPrivate());
-        return b.build(signer);
     }
 }
