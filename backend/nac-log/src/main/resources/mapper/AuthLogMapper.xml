@@ -8,6 +8,9 @@
         <where>
             <if test="authType != null and authType != ''">AND auth_type = #{authType}</if>
             <if test="result != null">AND result = #{result}</if>
+            <if test="username != null and username != ''">AND (username LIKE CONCAT('%',#{username},'%') OR phone LIKE CONCAT('%',#{username},'%'))</if>
+            <if test="mac != null and mac != ''">AND mac LIKE CONCAT('%',#{mac},'%')</if>
+            <if test="ip != null and ip != ''">AND ip LIKE CONCAT('%',#{ip},'%')</if>
         </where>
     </sql>
 

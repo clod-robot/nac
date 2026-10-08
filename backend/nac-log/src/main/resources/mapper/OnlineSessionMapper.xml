@@ -2,16 +2,27 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.nac.log.mapper.OnlineSessionMapper">
 
+    <sql id="cols">id, acct_session_id, username_mask, mac, nas_ip, framed_ip, vlan_id, status, start_time, update_time</sql>
+
+    <sql id="cond">
+        <where>
+            status = 1
+            <if test="username != null and username != ''">AND username_mask LIKE CONCAT('%',#{username},'%')</if>
+            <if test="mac != null and mac != ''">AND mac LIKE CONCAT('%',#{mac},'%')</if>
+            <if test="ip != null and ip != ''">AND framed_ip LIKE CONCAT('%',#{ip},'%')</if>
+        </where>
+    </sql>
+
     <select id="selectPage" resultType="com.nac.log.entity.OnlineSession">
-        SELECT id, acct_session_id, username_mask, mac, nas_ip, framed_ip, vlan_id, status, start_time, update_time
-        FROM sys_online_session
-        WHERE status = 1
+        SELECT <include refid="cols"/> FROM sys_online_session
+        <include refid="cond"/>
         ORDER BY id DESC
         LIMIT #{offset}, #{size}
     </select>
 
     <select id="countAll" resultType="long">
-        SELECT COUNT(1) FROM sys_online_session WHERE status = 1
+        SELECT COUNT(1) FROM sys_online_session
+        <include refid="cond"/>
     </select>
 
     <delete id="deleteById">

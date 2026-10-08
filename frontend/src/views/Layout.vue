@@ -14,7 +14,7 @@
         <el-menu-item v-permission="['admin']" index="/op-log"><el-icon><Document /></el-icon><span>操作日志</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/auth-log"><el-icon><Tickets /></el-icon><span>认证日志</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/syslog"><el-icon><Share /></el-icon><span>日志管理</span></el-menu-item>
-        <el-menu-item v-permission="['admin']" index="/online"><el-icon><Monitor /></el-icon><span>终端在线</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/online"><el-icon><Monitor /></el-icon><span>在线终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/terminal"><el-icon><Connection /></el-icon><span>远程终端</span></el-menu-item>
       </el-menu>
     </el-aside>
@@ -51,7 +51,7 @@
         <el-menu-item v-permission="['admin']" index="/op-log"><el-icon><Document /></el-icon><span>操作日志</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/auth-log"><el-icon><Tickets /></el-icon><span>认证日志</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/syslog"><el-icon><Share /></el-icon><span>日志管理</span></el-menu-item>
-        <el-menu-item v-permission="['admin']" index="/online"><el-icon><Monitor /></el-icon><span>终端在线</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/online"><el-icon><Monitor /></el-icon><span>在线终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/terminal"><el-icon><Connection /></el-icon><span>远程终端</span></el-menu-item>
       </el-menu>
     </el-drawer>

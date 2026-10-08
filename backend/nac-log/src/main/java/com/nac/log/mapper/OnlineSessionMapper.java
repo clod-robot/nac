@@ -8,9 +8,10 @@ import java.util.List;
 
 @Mapper
 public interface OnlineSessionMapper {
-    List<OnlineSession> selectPage(@Param("offset") int offset, @Param("size") int size);
+    List<OnlineSession> selectPage(@Param("offset") int offset, @Param("size") int size,
+                                   @Param("username") String username, @Param("mac") String mac, @Param("ip") String ip);
 
-    long countAll();
+    long countAll(@Param("username") String username, @Param("mac") String mac, @Param("ip") String ip);
 
     int deleteById(@Param("id") Long id);
 }

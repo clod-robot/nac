@@ -54,18 +54,21 @@ public class LogController {
         return Result.success(data);
     }
 
-    /** 认证日志（login/portal/radius），支持按类型、结果筛选 */
+    /** 认证日志（login/portal/radius），支持按类型、结果、用户、MAC、终端IP筛选 */
     @GetMapping("/auth-list")
     @RequireRole("admin")
     public Result<Map<String, Object>> authList(@RequestParam(defaultValue = "1") int page,
                                                 @RequestParam(defaultValue = "20") int size,
                                                 @RequestParam(required = false) String type,
-                                                @RequestParam(required = false) Integer result) {
+                                                @RequestParam(required = false) Integer result,
+                                                @RequestParam(required = false) String username,
+                                                @RequestParam(required = false) String mac,
+                                                @RequestParam(required = false) String ip) {
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
         int offset = (page - 1) * size;
-        List<AuthLog> list = authLogMapper.selectPage(offset, size, type, result);
-        long total = authLogMapper.countAll(type, result);
+        List<AuthLog> list = authLogMapper.selectPage(offset, size, type, result, trim(username), trim(mac), trim(ip));
+        long total = authLogMapper.countAll(type, result, trim(username), trim(mac), trim(ip));
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
         data.put("total", total);
@@ -74,22 +77,29 @@ public class LogController {
         return Result.success(data);
     }
 
-    /** 在线会话（RADIUS 计费驱动的在线终端） */
+    /** 在线会话（RADIUS 计费驱动的在线终端），支持按用户、MAC、终端IP筛选 */
     @GetMapping("/online-list")
     @RequireRole("admin")
     public Result<Map<String, Object>> onlineList(@RequestParam(defaultValue = "1") int page,
-                                                  @RequestParam(defaultValue = "20") int size) {
+                                                  @RequestParam(defaultValue = "20") int size,
+                                                  @RequestParam(required = false) String username,
+                                                  @RequestParam(required = false) String mac,
+                                                  @RequestParam(required = false) String ip) {
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
         int offset = (page - 1) * size;
-        List<OnlineSession> list = onlineSessionMapper.selectPage(offset, size);
-        long total = onlineSessionMapper.countAll();
+        List<OnlineSession> list = onlineSessionMapper.selectPage(offset, size, trim(username), trim(mac), trim(ip));
+        long total = onlineSessionMapper.countAll(trim(username), trim(mac), trim(ip));
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
         data.put("total", total);
         data.put("page", page);
         data.put("size", size);
         return Result.success(data);
+    }
+
+    private static String trim(String s) {
+        return s == null ? null : (s.trim().isEmpty() ? null : s.trim());
     }
 
     /** 强制下线（删除在线会话记录） */

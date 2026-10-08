@@ -3,6 +3,9 @@
     <div class="bar">
       <span class="t">认证日志</span>
       <div class="filters">
+        <el-input v-model="f.username" placeholder="用户" clearable style="width:150px" @keyup.enter="reload" />
+        <el-input v-model="f.mac" placeholder="MAC地址" clearable style="width:170px" @keyup.enter="reload" />
+        <el-input v-model="f.ip" placeholder="终端IP" clearable style="width:150px" @keyup.enter="reload" />
         <el-select v-model="f.type" placeholder="类型" clearable style="width:130px" @change="reload">
           <el-option label="登录 login" value="login" />
           <el-option label="Portal" value="portal" />
@@ -12,7 +15,8 @@
           <el-option label="成功" :value="1" />
           <el-option label="失败" :value="0" />
         </el-select>
-        <el-button :icon="Refresh" @click="reload">刷新</el-button>
+        <el-button :icon="Search" type="primary" @click="reload">查询</el-button>
+        <el-button :icon="Refresh" @click="reset">重置</el-button>
       </div>
     </div>
     <el-table :data="list" border>
@@ -49,18 +53,21 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 import { authLogList } from '../api/auth'
 
 const list = ref([]); const total = ref(0); const page = ref(1); const size = ref(20)
 const loading = ref(false)
-const f = ref({ type: '', result: null })
+const f = ref({ username: '', mac: '', ip: '', type: '', result: null })
 const typeTag = (t) => ({ login: '', portal: 'warning', radius: 'success' }[t] || 'info')
 
 async function load() {
   loading.value = true
   try {
     const params = { page: page.value, size: size.value }
+    if (f.value.username) params.username = f.value.username
+    if (f.value.mac) params.mac = f.value.mac
+    if (f.value.ip) params.ip = f.value.ip
     if (f.value.type) params.type = f.value.type
     if (f.value.result !== null && f.value.result !== '' && f.value.result !== undefined) params.result = f.value.result
     const r = await authLogList(params)
@@ -68,6 +75,7 @@ async function load() {
   } finally { loading.value = false }
 }
 function reload() { page.value = 1; load() }
+function reset() { f.value = { username: '', mac: '', ip: '', type: '', result: null }; reload() }
 function onPage(p) { page.value = p; load() }
 onMounted(load)
 </script>

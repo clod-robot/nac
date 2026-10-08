@@ -1,9 +1,15 @@
 <template>
   <div class="online" v-loading="loading">
     <div class="bar">
-      <span class="t">终端在线管理</span>
+      <span class="t">在线终端管理</span>
       <span class="tip">数据来自 RADIUS 计费会话（sys_online_session）</span>
-      <el-button :icon="Refresh" @click="load">刷新</el-button>
+    </div>
+    <div class="filters">
+      <el-input v-model="f.username" placeholder="用户" clearable style="width:160px" @keyup.enter="reload" />
+      <el-input v-model="f.mac" placeholder="MAC地址" clearable style="width:180px" @keyup.enter="reload" />
+      <el-input v-model="f.ip" placeholder="终端IP" clearable style="width:160px" @keyup.enter="reload" />
+      <el-button :icon="Search" type="primary" @click="reload">查询</el-button>
+      <el-button :icon="Refresh" @click="reset">重置</el-button>
     </div>
     <el-table :data="list" border>
       <el-table-column prop="acctSessionId" label="会话ID" min-width="160" show-overflow-tooltip />
@@ -30,16 +36,21 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 import { onlineList, onlineDelete } from '../api/auth'
 
 const list = ref([]); const total = ref(0); const page = ref(1); const size = ref(20)
 const loading = ref(false)
+const f = ref({ username: '', mac: '', ip: '' })
 
 async function load() {
   loading.value = true
   try {
-    const r = await onlineList({ page: page.value, size: size.value })
+    const params = { page: page.value, size: size.value }
+    if (f.value.username) params.username = f.value.username
+    if (f.value.mac) params.mac = f.value.mac
+    if (f.value.ip) params.ip = f.value.ip
+    const r = await onlineList(params)
     list.value = r.data.list; total.value = r.data.total
   } finally { loading.value = false }
 }
@@ -48,6 +59,8 @@ async function offline(row) {
   ElMessage.success('已下线')
   load()
 }
+function reload() { page.value = 1; load() }
+function reset() { f.value = { username: '', mac: '', ip: '' }; reload() }
 function onPage(p) { page.value = p; load() }
 onMounted(load)
 </script>
@@ -55,6 +68,7 @@ onMounted(load)
 <style scoped>
 .online { background: #fff; border-radius: 8px; padding: 16px; }
 .bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .bar .t { font-weight: 600; }
 .tip { color: #909399; font-size: 12px; flex: 1; }
 .pg { margin-top: 12px; display: flex; justify-content: flex-end; }
