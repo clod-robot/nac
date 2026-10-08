@@ -24,7 +24,7 @@ spring:
     producer:
       acks: 1
       properties:
-        max.block.ms: 100
+        max.block.ms: 3000
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml

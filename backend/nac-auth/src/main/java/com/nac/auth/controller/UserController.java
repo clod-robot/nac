@@ -7,6 +7,7 @@ import com.nac.common.exception.BusinessException;
 import com.nac.common.result.Result;
 import com.nac.common.security.PhoneCryptoUtil;
 import com.nac.common.security.RequireRole;
+import com.nac.common.log.OperationLog;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import org.springframework.beans.factory.ObjectProvider;
@@ -101,6 +102,7 @@ public class UserController {
 
     @PostMapping
     @RequireRole
+    @OperationLog("新增账号")
     public Result<Void> create(@RequestBody CreateReq req) {
         if (req.getUsername() == null || req.getUsername().trim().isEmpty()) {
             throw new BusinessException(400, "账号不能为空");
@@ -146,6 +148,7 @@ public class UserController {
 
     @PutMapping("/status")
     @RequireRole
+    @OperationLog("修改账号状态")
     public Result<Void> status(@RequestBody StatusReq req) {
         Long self = UserContext.getUserId();
         if (req.getId() != null && req.getId().equals(self)) {
@@ -169,6 +172,7 @@ public class UserController {
 
     @PutMapping("/terminal-limit")
     @RequireRole
+    @OperationLog("修改终端数量上限")
     public Result<Void> terminalLimit(@RequestBody LimitReq req) {
         if (req.getTerminalLimit() == null || req.getTerminalLimit() < 0) {
             throw new BusinessException(400, "终端数量不合法");
@@ -185,6 +189,7 @@ public class UserController {
 
     @PutMapping("/dept")
     @RequireRole
+    @OperationLog("修改账号归属部门")
     public Result<Void> dept(@RequestBody DeptReq req) {
         userMapper.updateDept(req.getId(), req.getDept());
         return Result.success();
@@ -201,6 +206,7 @@ public class UserController {
     /** 更新账号资料：归属部门 + 使用人(姓名) + 联系电话（含 admin）。 */
     @PutMapping("/profile")
     @RequireRole
+    @OperationLog("修改账号资料")
     public Result<Void> profile(@RequestBody ProfileReq req) {
         userMapper.updateProfile(req.getId(), req.getDept(), req.getRealName());
         if (req.getPhone() != null && !req.getPhone().isBlank()) {

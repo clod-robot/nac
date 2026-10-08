@@ -10,12 +10,34 @@
     <select id="selectPage" resultType="com.nac.log.entity.SysLog">
         SELECT id, operator, operator_id, role, ip, method, operation, params, status, cost_ms, create_time
         FROM sys_log
+        <where>
+            <if test="operation != null and operation != ''">
+                AND operation LIKE CONCAT('%', #{operation}, '%')
+            </if>
+            <if test="startTime != null and startTime != ''">
+                AND create_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND create_time &lt;= #{endTime}
+            </if>
+        </where>
         ORDER BY id DESC
         LIMIT #{offset}, #{size}
     </select>
 
     <select id="countAll" resultType="long">
         SELECT COUNT(1) FROM sys_log
+        <where>
+            <if test="operation != null and operation != ''">
+                AND operation LIKE CONCAT('%', #{operation}, '%')
+            </if>
+            <if test="startTime != null and startTime != ''">
+                AND create_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND create_time &lt;= #{endTime}
+            </if>
+        </where>
     </select>
 
 </mapper>

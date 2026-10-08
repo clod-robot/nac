@@ -25,8 +25,9 @@ spring:
       retries: 1
       acks: 1
       properties:
-        # broker/topic 不可用时 100ms 快速失败，严禁阻塞 RADIUS 响应线程（默认 60s 会拖垮认证/计费）
-        max.block.ms: 100
+        # broker/topic 元数据冷启动时需要时间获取，100ms 会导致发送必失败丢日志；
+        # 仅在元数据缺失的极少数请求阻塞，正常热路径不阻塞 RADIUS 响应线程
+        max.block.ms: 1000
         delivery.timeout.ms: 2000
 
 mybatis:

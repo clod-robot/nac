@@ -1,6 +1,7 @@
 package com.nac.log.controller;
 
 import com.nac.common.constant.RedisKeyConstants;
+import com.nac.common.log.OperationLog;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.result.Result;
 import com.nac.common.security.RequireRole;
@@ -40,12 +41,18 @@ public class LogController {
     @GetMapping("/list")
     @RequireRole("admin")
     public Result<Map<String, Object>> list(@RequestParam(defaultValue = "1") int page,
-                                            @RequestParam(defaultValue = "20") int size) {
+                                            @RequestParam(defaultValue = "20") int size,
+                                            @RequestParam(required = false) String operation,
+                                            @RequestParam(required = false) String startTime,
+                                            @RequestParam(required = false) String endTime) {
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
         int offset = (page - 1) * size;
-        List<SysLog> list = sysLogMapper.selectPage(offset, size);
-        long total = countWithCache();
+        String op = trim(operation), st = trim(startTime), et = trim(endTime);
+        List<SysLog> list = sysLogMapper.selectPage(offset, size, op, st, et);
+        // 带筛选条件时按条件统计，否则走缓存总数
+        long total = (op != null || st != null || et != null)
+                ? sysLogMapper.countAll(op, st, et) : countWithCache();
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
         data.put("total", total);
@@ -111,6 +118,7 @@ public class LogController {
     /** 强制下线（删除在线会话记录） */
     @DeleteMapping("/online/{id}")
     @RequireRole("admin")
+    @OperationLog("强制下线终端")
     public Result<Void> offline(@PathVariable("id") Long id) {
         onlineSessionMapper.deleteById(id);
         return Result.success();
@@ -120,11 +128,11 @@ public class LogController {
         try {
             String cached = redisUtil.get(RedisKeyConstants.LOG_COUNT_ALL);
             if (cached != null) return Long.parseLong(cached);
-            long total = sysLogMapper.countAll();
+            long total = sysLogMapper.countAll(null, null, null);
             redisUtil.set(RedisKeyConstants.LOG_COUNT_ALL, String.valueOf(total), 60);
             return total;
         } catch (Exception e) {
-            return sysLogMapper.countAll();
+            return sysLogMapper.countAll(null, null, null);
         }
     }
 }

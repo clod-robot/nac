@@ -2,6 +2,7 @@ package com.nac.auth.controller;
 
 import com.nac.auth.entity.PortalConfig;
 import com.nac.auth.service.PortalService;
+import com.nac.common.log.OperationLog;
 import com.nac.common.ratelimit.RateLimit;
 import com.nac.common.result.Result;
 import com.nac.common.security.RequireRole;
@@ -59,6 +60,7 @@ public class PortalController {
 
     @PutMapping("/admin/config")
     @RequireRole("admin")
+    @OperationLog("修改门户配置")
     public Result<Void> updateConfig(@RequestBody Map<String, String> kv) {
         portalService.updateConfig(kv);
         return Result.success();
