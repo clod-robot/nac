@@ -13,6 +13,7 @@
             <el-radio value="aliyun">阿里云</el-radio>
             <el-radio value="tencent">腾讯云</el-radio>
             <el-radio value="huawei">华为云</el-radio>
+            <el-radio value="custom">自定义网关</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -44,6 +45,37 @@
         <el-form-item label="请求 URL"><el-input v-model="cfg.huawei.url" /></el-form-item>
       </el-form>
 
+      <!-- 自定义网关 -->
+      <el-form v-else-if="cfg.provider === 'custom'" label-width="120px" style="max-width: 720px">
+        <el-form-item label="请求 URL">
+          <el-input v-model="cfg.custom.url" placeholder="如 https://sms.example.com/send?phone={phone}&code={code}" />
+        </el-form-item>
+        <el-form-item label="请求方法">
+          <el-radio-group v-model="cfg.custom.method">
+            <el-radio value="POST">POST</el-radio>
+            <el-radio value="GET">GET</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="报文类型">
+          <el-radio-group v-model="cfg.custom.contentType">
+            <el-radio value="json">JSON</el-radio>
+            <el-radio value="form">表单</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="请求头">
+          <el-input v-model="cfg.custom.headers" type="textarea" :rows="2"
+            placeholder="每行一个，格式 Key: Value，例如：&#10;Authorization: Bearer xxx&#10;X-Api-Key: abc" />
+        </el-form-item>
+        <el-form-item label="报文模板">
+          <el-input v-model="cfg.custom.bodyTemplate" type="textarea" :rows="4"
+            placeholder="支持占位符 {phone} {code} {signName} {template}，例如：&#10;{&quot;mobile&quot;:&quot;{phone}&quot;,&quot;content&quot;:&quot;您的验证码是{code}&quot;}" />
+        </el-form-item>
+        <el-form-item label="成功判定">
+          <el-input v-model="cfg.custom.successContains"
+            placeholder="响应体需包含的子串（留空则以 HTTP 2xx 为成功），如：&quot;code&quot;:0" />
+        </el-form-item>
+      </el-form>
+
       <el-form v-else label-width="140px" style="max-width: 640px">
         <el-form-item label="说明">当前为模拟网关，验证码不会真实下发，仅用于联调。</el-form-item>
       </el-form>
@@ -64,7 +96,8 @@ const cfg = reactive({
   provider: 'mock',
   aliyun: { accessKeyId: '', accessKeySecret: '', signName: '', templateCode: '' },
   tencent: { secretId: '', secretKey: '', region: '', appId: '', signName: '', templateId: '' },
-  huawei: { appKey: '', appSecret: '', sender: '', templateId: '', url: '' }
+  huawei: { appKey: '', appSecret: '', sender: '', templateId: '', url: '' },
+  custom: { url: '', method: 'POST', contentType: 'json', headers: '', bodyTemplate: '', successContains: '' }
 })
 
 onMounted(load)
@@ -77,6 +110,7 @@ async function load() {
     Object.assign(cfg.aliyun, d.aliyun || {})
     Object.assign(cfg.tencent, d.tencent || {})
     Object.assign(cfg.huawei, d.huawei || {})
+    Object.assign(cfg.custom, d.custom || {})
   } finally {
     loading.value = false
   }

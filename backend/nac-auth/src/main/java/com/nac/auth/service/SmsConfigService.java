@@ -20,7 +20,7 @@ import java.util.Set;
 @Service
 public class SmsConfigService {
 
-    private static final Set<String> PROVIDERS = Set.of("mock", "aliyun", "tencent", "huawei");
+    private static final Set<String> PROVIDERS = Set.of("mock", "aliyun", "tencent", "huawei", "custom");
 
     private final RedisUtil redisUtil;
 
@@ -57,6 +57,7 @@ public class SmsConfigService {
         if (c.getAliyun() == null) c.setAliyun(new SmsConfig.Aliyun());
         if (c.getTencent() == null) c.setTencent(new SmsConfig.Tencent());
         if (c.getHuawei() == null) c.setHuawei(new SmsConfig.Huawei());
+        if (c.getCustom() == null) c.setCustom(new SmsConfig.Custom());
 
         SmsConfig.Aliyun a = c.getAliyun();
         a.setAccessKeyId(nz(a.getAccessKeyId(), defAliAk));
@@ -89,6 +90,7 @@ public class SmsConfigService {
         if (cfg.getAliyun() == null) cfg.setAliyun(new SmsConfig.Aliyun());
         if (cfg.getTencent() == null) cfg.setTencent(new SmsConfig.Tencent());
         if (cfg.getHuawei() == null) cfg.setHuawei(new SmsConfig.Huawei());
+        if (cfg.getCustom() == null) cfg.setCustom(new SmsConfig.Custom());
         redisUtil.set(RedisKeyConstants.SMS_CONFIG, JSON.toJSONString(cfg));
     }
 
