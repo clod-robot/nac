@@ -59,6 +59,8 @@ public final class RadiusCodes {
     public static final int EAP_FAILURE = 4;
     public static final int EAP_TYPE_IDENTITY = 1;
     public static final int EAP_TYPE_MD5 = 4;
+    public static final int EAP_TYPE_TLS = 13;   // EAP-TLS (RFC 5216)
+    public static final int EAP_TYPE_PEAP = 25;  // PEAP (RFC 5216 隧道)
 
     public static final int HEADER_LEN = 20; // code(1)+id(1)+length(2)+auth(16)
 }

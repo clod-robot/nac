@@ -13,6 +13,7 @@ import com.nac.radius.mapper.RadiusUserMapper;
 import com.nac.radius.packet.RadiusCodes;
 import com.nac.radius.packet.RadiusCodec;
 import com.nac.radius.packet.RadiusPacket;
+import com.nac.radius.eap.EapTlsSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -41,13 +42,14 @@ public class RadiusAuthService {
     private final RadiusSecretService secretService;
     private final ExemptTerminalMapper exemptMapper;
     private final SyslogForwarder syslogForwarder;
+    private final EapTlsSupport eapTlsSupport;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, NasMapper nasMapper,
                              RedisUtil redisUtil, AesCryptoUtil aesCryptoUtil, RadiusProperties props,
                              RadiusSecretService secretService, ExemptTerminalMapper exemptMapper,
-                             SyslogForwarder syslogForwarder) {
+                             SyslogForwarder syslogForwarder, EapTlsSupport eapTlsSupport) {
         this.userMapper = userMapper;
         this.authLogMapper = authLogMapper;
         this.nasMapper = nasMapper;
@@ -57,6 +59,7 @@ public class RadiusAuthService {
         this.secretService = secretService;
         this.exemptMapper = exemptMapper;
         this.syslogForwarder = syslogForwarder;
+        this.eapTlsSupport = eapTlsSupport;
     }
 
     /** 处理 Access-Request，返回响应报文（Accept/Reject），异常时返回 Reject。 */
@@ -154,8 +157,12 @@ public class RadiusAuthService {
         if (len < 4 || len > eap.length) return eapReject(request, user, "bad eap length", id);
         int type = (code == RadiusCodes.EAP_REQUEST || code == RadiusCodes.EAP_RESPONSE) && eap.length >= 5 ? (eap[4] & 0xFF) : -1;
 
-        // Response/Identity -> 下发 EAP-Request/MD5-Challenge
+        // Response/Identity -> 按配置下发对应 EAP 方法
         if (code == RadiusCodes.EAP_RESPONSE && type == RadiusCodes.EAP_TYPE_IDENTITY) {
+            String method = props.getEapMethod() == null ? "MD5" : props.getEapMethod().trim().toUpperCase();
+            if (method.equals("TLS") || method.equals("PEAP")) {
+                return startTls(request, user, method.equals("PEAP"), id);
+            }
             byte[] challenge = new byte[16];
             SECURE_RANDOM.nextBytes(challenge);
             int chalId = (id + 1) & 0xFF;
@@ -210,7 +217,175 @@ public class RadiusAuthService {
             return accept;
         }
 
+        // Response/EAP-TLS 或 PEAP -> 驱动 TLS 握手
+        if (code == RadiusCodes.EAP_RESPONSE && (type == RadiusCodes.EAP_TYPE_TLS || type == RadiusCodes.EAP_TYPE_PEAP)) {
+            return handleTls(request, user, type, id);
+        }
+
         return eapReject(request, user, "unsupported eap method", id);
+    }
+
+    /** 发起 EAP-TLS/PEAP：下发 EAP-Request/TLS(start)，State 携带会话 id。 */
+    private RadiusPacket startTls(RadiusPacket request, RadiusUser user, boolean peap, int id) {
+        try {
+            String sid = eapTlsSupport.newSession(!peap); // EAP-TLS 需客户端证书，PEAP 不需要
+            int eapType = peap ? RadiusCodes.EAP_TYPE_PEAP : RadiusCodes.EAP_TYPE_TLS;
+            int reqId = (id + 1) & 0xFF;
+            byte[] eapReq = eapPacket(RadiusCodes.EAP_REQUEST, reqId, new byte[]{(byte) eapType, 0x20}); // S 标志
+            return tlsChallenge(request, sid, eapReq);
+        } catch (Exception e) {
+            return eapReject(request, user, "tls init failed", id);
+        }
+    }
+
+    /** 处理 EAP-TLS/PEAP 响应：驱动 SSLEngine 握手，分片收发；PEAP 握手后承载内层 EAP。 */
+    private RadiusPacket handleTls(RadiusPacket request, RadiusUser user, int eapType, int id) {
+        byte[] stateAttr = request.getAttr(RadiusCodes.STATE);
+        if (stateAttr == null) return eapReject(request, user, "missing tls state", id);
+        String sid = new String(stateAttr, StandardCharsets.UTF_8);
+        EapTlsSupport.Session s = eapTlsSupport.get(sid);
+        if (s == null) return eapReject(request, user, "tls session expired", id);
+        boolean peap = eapType == RadiusCodes.EAP_TYPE_PEAP;
+        int reqId = (id + 1) & 0xFF;
+        try {
+            // 1) 有待发出站分片则先发一片（客户端 ACK 驱动）
+            if (!s.outFrags.isEmpty()) {
+                byte[] frag = s.outFrags.poll();
+                return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId, tlvData(eapType, frag)));
+            }
+            // 2) 重组入站分片
+            byte[] eap = concatEap(request);
+            byte[] eapData = eap.length > 5 ? Arrays.copyOfRange(eap, 5, eap.length) : new byte[0];
+            byte[] tlsPayload = eapTlsSupport.accumulate(s, eapData);
+            if (tlsPayload == null) {
+                return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId, new byte[]{(byte) eapType, 0x00}));
+            }
+            // 3) 推进 TLS 状态机
+            EapTlsSupport.StepResult r = eapTlsSupport.step(sid, tlsPayload);
+            if (r.failed()) {
+                eapTlsSupport.remove(sid);
+                return eapReject(request, user, "tls failed", id);
+            }
+            // PEAP：内层 EAP 响应（解出的隧道内明文）
+            if (peap && s.handshakeDone && r.appData() != null) {
+                return handlePeapInner(request, user, s, sid, r.appData(), id);
+            }
+            if (r.success()) {
+                if (peap) {
+                    // 先下发服务端 Finished，保持会话，待 ACK 完再发起内层 EAP
+                    enqueueWrapped(s, sid, r.outgoingTls());
+                    byte[] frag = s.outFrags.isEmpty() ? new byte[0] : s.outFrags.poll();
+                    return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId, tlvData(eapType, frag)));
+                }
+                eapTlsSupport.remove(sid);
+                return tlsAccept(request, user);
+            }
+            // PEAP：握手已完成且 Finished 已发完 → 发起内层 EAP-Request/Identity
+            if (peap && s.handshakeDone && !s.peapInnerStarted) {
+                s.peapInnerStarted = true;
+                s.innerId = 100;
+                byte[] innerReq = eapPacket(RadiusCodes.EAP_REQUEST, s.innerId, new byte[]{(byte) 1}); // Identity
+                enqueueWrapped(s, sid, eapTlsSupport.wrapApp(sid, innerReq));
+                byte[] frag = s.outFrags.poll();
+                return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId, tlvData(eapType, frag)));
+            }
+            // 4) 握手继续：出站 TLS 分片入队，发第一片
+            for (byte[] f : eapTlsSupport.fragmentForEap(r.outgoingTls())) s.outFrags.add(f);
+            byte[] frag = s.outFrags.isEmpty() ? new byte[0] : s.outFrags.poll();
+            return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId, tlvData(eapType, frag)));
+        } catch (Exception e) {
+            eapTlsSupport.remove(sid);
+            return eapReject(request, user, "tls error", id);
+        }
+    }
+
+    /** 将 TLS 网络字节分片后加入出站队列。 */
+    private void enqueueWrapped(EapTlsSupport.Session s, String sid, byte[] netTls) {
+        if (netTls == null) netTls = new byte[0];
+        for (byte[] f : eapTlsSupport.fragmentForEap(netTls)) s.outFrags.add(f);
+    }
+
+    /** EAP-TLS 成功：EAP-Success + 授权属性。 */
+    private RadiusPacket tlsAccept(RadiusPacket request, RadiusUser user) {
+        return tlsAccept(request, user, "EAP-TLS");
+    }
+
+    private RadiusPacket tlsAccept(RadiusPacket request, RadiusUser user, String method) {
+        clearFailures(user.getUsername());
+        RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
+        accept.addAttribute(RadiusCodes.EAP_MESSAGE, eapPacket(RadiusCodes.EAP_SUCCESS, request.getIdentifier(), null));
+        accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
+        if (props.getVlanId() > 0) {
+            accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
+            accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);
+            accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
+        }
+        accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(user.getUsername()));
+        accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+        recordAuth(request, 1, method + " 认证成功");
+        log.info("RADIUS {} 认证成功: user={} nas={}", method, mask(user.getUsername()), nasIpOf(request));
+        return accept;
+    }
+
+    /** PEAP 内层 EAP-MD5：在已建立的 TLS 隧道内完成内层认证。 */
+    private RadiusPacket handlePeapInner(RadiusPacket request, RadiusUser user, EapTlsSupport.Session s,
+                                         String sid, byte[] innerEap, int id) throws Exception {
+        int reqId = (id + 1) & 0xFF;
+        int iCode = innerEap[0] & 0xFF;
+        int iId = innerEap[1] & 0xFF;
+        int iType = innerEap.length > 4 ? innerEap[4] & 0xFF : -1;
+        if (iCode == RadiusCodes.EAP_RESPONSE && iType == 1) {
+            // 内层 Identity → 下发内层 MD5 challenge
+            s.innerId = (iId + 1) & 0xFF;
+            s.innerChallenge = new byte[16];
+            new java.security.SecureRandom().nextBytes(s.innerChallenge);
+            byte[] data = new byte[17];
+            data[0] = 16;
+            System.arraycopy(s.innerChallenge, 0, data, 1, 16);
+            byte[] typeData = new byte[1 + data.length];
+            typeData[0] = 4; // EAP-MD5
+            System.arraycopy(data, 0, typeData, 1, data.length);
+            byte[] innerReq = eapPacket(RadiusCodes.EAP_REQUEST, s.innerId, typeData);
+            enqueueWrapped(s, sid, eapTlsSupport.wrapApp(sid, innerReq));
+            byte[] frag = s.outFrags.poll();
+            return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId,
+                    tlvData(RadiusCodes.EAP_TYPE_PEAP, frag)));
+        }
+        if (iCode == RadiusCodes.EAP_RESPONSE && iType == 4) {
+            // 内层 MD5 响应校验
+            int vlen = innerEap[5] & 0xFF;
+            byte[] resp = Arrays.copyOfRange(innerEap, 6, 6 + vlen);
+            byte[] pw = user.getPasswordHash().getBytes(StandardCharsets.UTF_8);
+            byte[] buf = new byte[1 + pw.length + 16];
+            buf[0] = (byte) iId;
+            System.arraycopy(pw, 0, buf, 1, pw.length);
+            System.arraycopy(s.innerChallenge, 0, buf, 1 + pw.length, 16);
+            if (!MessageDigest.isEqual(RadiusCodec.md5(buf), resp)) {
+                eapTlsSupport.remove(sid);
+                registerFailure(user.getUsername());
+                return eapReject(request, user, "invalid credentials", id);
+            }
+            eapTlsSupport.remove(sid);
+            return tlsAccept(request, user, "PEAP");
+        }
+        eapTlsSupport.remove(sid);
+        return eapReject(request, user, "peap inner unsupported", id);
+    }
+
+    private RadiusPacket tlsChallenge(RadiusPacket request, String sid, byte[] eapReq) {
+        RadiusPacket ch = new RadiusPacket(RadiusCodes.ACCESS_CHALLENGE, request.getIdentifier(), null);
+        ch.addAttribute(RadiusCodes.EAP_MESSAGE, eapReq);
+        ch.addAttribute(RadiusCodes.STATE, sid.getBytes(StandardCharsets.UTF_8));
+        ch.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+        return ch;
+    }
+
+    /** EAP data = type(1) + payload。 */
+    private byte[] tlvData(int eapType, byte[] payload) {
+        byte[] d = new byte[1 + payload.length];
+        d[0] = (byte) eapType;
+        System.arraycopy(payload, 0, d, 1, payload.length);
+        return d;
     }
 
     /** 拼接请求中所有 EAP-Message 属性（跨属性分片）为一个 EAP 报文。 */
@@ -225,8 +400,6 @@ public class RadiusAuthService {
         for (byte[] p : parts) { System.arraycopy(p, 0, out, off, p.length); off += p.length; }
         return out;
     }
-
-    /** 构造 EAP 报文：code/id/length/[type+data]。data 为 null 表示 Success/Failure（无 type 字段）。 */
     private byte[] eapPacket(int code, int id, byte[] data) {
         int len = 4 + (data == null ? 0 : data.length);
         byte[] out = new byte[len];
