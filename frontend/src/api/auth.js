@@ -63,3 +63,7 @@ export const exemptList = () => request.get('/api/auth/admin/exempt-terminals')
 export const exemptCreate = (data) => request.post('/api/auth/admin/exempt-terminals', data)
 export const exemptUpdate = (data) => request.put('/api/auth/admin/exempt-terminals', data)
 export const exemptDelete = (id) => request.delete(`/api/auth/admin/exempt-terminals/${id}`)
+
+// 系统信息：服务器时间 / NTP（admin）
+export const getSystemInfo = () => request.get('/api/auth/system/info')
+export const setSystemNtp = (data) => request.put('/api/auth/system/ntp', data)

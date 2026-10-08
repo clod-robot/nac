@@ -25,7 +25,9 @@
             <el-tag :type="row.enabled === 1 ? 'success' : 'info'" size="small">{{ row.enabled === 1 ? '启用' : '禁用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" min-width="160" />
+        <el-table-column label="创建时间" min-width="160">
+        <template #default="{ row }">{{ fmt(row.createTime) }}</template>
+      </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click="openEdit(row)">编辑</el-button>
@@ -57,6 +59,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { exemptList, exemptCreate, exemptUpdate, exemptDelete } from '../api/auth'
+import { fmtTime } from '../utils/format'
+const fmt = fmtTime
 
 const loading = ref(false)
 const list = ref([])

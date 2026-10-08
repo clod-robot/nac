@@ -43,7 +43,9 @@
         <el-table-column prop="failCount" label="失败" width="90" align="center">
           <template #default="{ row }"><el-tag type="danger" size="small">{{ row.failCount || 0 }}</el-tag></template>
         </el-table-column>
-        <el-table-column prop="lastSeen" label="最后认证时间" min-width="170" />
+        <el-table-column label="最后认证时间" min-width="170">
+        <template #default="{ row }">{{ fmt(row.lastSeen) }}</template>
+      </el-table-column>
       </el-table>
     </el-card>
 
@@ -68,6 +70,8 @@ import { ref, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getNasSecret, setNasSecret, listNas, renameNas } from '../api/auth'
+import { fmtTime } from '../utils/format'
+const fmt = fmtTime
 import { useBreakpoints } from '../composables/useBreakpoints'
 
 const { isMobile } = useBreakpoints()

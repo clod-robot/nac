@@ -42,7 +42,9 @@
           <el-tag :type="row.status === 1 ? 'success' : 'warning'">{{ row.status === 1 ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createTime" label="创建时间" min-width="150" />
+      <el-table-column label="创建时间" min-width="160">
+        <template #default="{ row }">{{ fmt(row.createTime) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <el-button v-if="row.roleCode !== 'admin'" size="small" @click="toggleStatus(row)">{{ row.status === 1 ? '禁用' : '启用' }}</el-button>
@@ -95,6 +97,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userResetPassword, userDelete } from '../api/auth'
+import { fmtTime } from '../utils/format'
+const fmt = fmtTime
 import { useBreakpoints } from '../composables/useBreakpoints'
 
 const { isMobile } = useBreakpoints()

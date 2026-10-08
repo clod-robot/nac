@@ -40,12 +40,12 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { onlineList, onlineDelete } from '../api/auth'
+import { fmtTime } from '../utils/format'
 
 const list = ref([]); const total = ref(0); const page = ref(1); const size = ref(20)
 const loading = ref(false)
 const f = ref({ username: '', mac: '', ip: '' })
-const pad = (n) => String(n).padStart(2, '0')
-const fmt = (t) => { if (!t) return '-'; const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}` }
+const fmt = fmtTime
 
 async function load() {
   loading.value = true

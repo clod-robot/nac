@@ -9,7 +9,9 @@
       <el-table-column prop="ip" label="IP" width="140" />
       <el-table-column prop="status" label="结果" width="100" />
       <el-table-column prop="costMs" label="耗时(ms)" width="100" />
-      <el-table-column prop="createTime" label="时间" width="180" />
+      <el-table-column label="时间" width="180">
+        <template #default="{ row }">{{ fmt(row.createTime) }}</template>
+      </el-table-column>
     </el-table>
     <el-pagination style="margin-top:12px" background layout="prev, pager, next, total"
       :total="total" :page-size="size" :current-page="page" @current-change="onPage" />
@@ -19,6 +21,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { logList } from '../api/auth'
+import { fmtTime } from '../utils/format'
+const fmt = fmtTime
 
 const list = ref([])
 const total = ref(0)

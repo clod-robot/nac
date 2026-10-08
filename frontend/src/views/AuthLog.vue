@@ -11,11 +11,11 @@
         <el-input v-model="f.username" placeholder="账号/手机号" clearable style="width:160px" @keyup.enter="reload" />
         <el-input v-model="f.ip" placeholder="IP" clearable style="width:140px" @keyup.enter="reload" />
         <el-input v-model="f.mac" placeholder="MAC" clearable style="width:160px" @keyup.enter="reload" />
-        <el-date-picker v-model="f.startTime" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm"
-          placeholder="时间" style="width:180px" />
+        <el-date-picker v-model="f.startTime" type="datetime" format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss"
+          placeholder="时间" style="width:190px" />
         <span class="range-to">至</span>
-        <el-date-picker v-model="f.endTime" type="datetime" format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm"
-          placeholder="时间" style="width:180px" />
+        <el-date-picker v-model="f.endTime" type="datetime" format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss"
+          placeholder="时间" style="width:190px" />
         <el-button :icon="Search" type="primary" @click="reload">查询</el-button>
         <el-button :icon="Refresh" @click="reset">重置</el-button>
       </div>
@@ -58,13 +58,13 @@
 import { ref, onMounted } from 'vue'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { authLogList } from '../api/auth'
+import { fmtTime } from '../utils/format'
 
 const list = ref([]); const total = ref(0); const page = ref(1); const size = ref(20)
 const loading = ref(false)
 const f = ref({ type: '', username: '', ip: '', mac: '', startTime: '', endTime: '' })
 const typeTag = (t) => ({ login: '', portal: 'warning', radius: 'success' }[t] || 'info')
-const pad = (n) => String(n).padStart(2, '0')
-const fmt = (t) => { if (!t) return '-'; const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}` }
+const fmt = fmtTime
 
 async function load() {
   loading.value = true
