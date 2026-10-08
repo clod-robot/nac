@@ -66,13 +66,16 @@ onMounted(() => {
   loadHostIp()
 })
 
-// 自动取服务器当前网口 IPv4 作为默认主机（仍可手动修改）
+// 自动取服务器当前管理网口 IPv4 作为默认主机（仍可手动修改）
 async function loadHostIp() {
   try {
     const { data } = await getNetworkInterfaces()
-    const list = (data && data.list) || data || []
-    const it = list.find(i => i && i.ipV4 && !String(i.ipV4).startsWith('127.'))
-    if (it) conn.host = it.ipV4
+    const list = Array.isArray(data) ? data : (data && data.list) || []
+    // 后端已过滤 lo/docker/veth/br-/virbr，仅物理口；优先选有默认网关的口(管理口)
+    const withGw = list.find(i => i && i.ipv4 && i.ipv4.address && i.ipv4Gateway)
+    const any = list.find(i => i && i.ipv4 && i.ipv4.address && !String(i.ipv4.address).startsWith('127.'))
+    const ip = (withGw || any) && (withGw || any).ipv4.address
+    if (ip) conn.host = ip
   } catch (e) { /* 取失败则保留默认值，不影响使用 */ }
 }
 
