@@ -73,7 +73,9 @@ public class UserController {
                                             @RequestParam(required = false) String keyword) {
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
-        List<SysUser> list = userMapper.selectPage((page - 1) * size, size, keyword);
+        // 关键词是纯数字(手机号)时，换算成盲索引再查，否则明文手机号搜不到
+        String phoneBlind = (keyword != null && PHONE_RE.matcher(keyword.trim()).matches()) ? blindIndex(keyword.trim()) : null;
+        List<SysUser> list = userMapper.selectPage((page - 1) * size, size, keyword, phoneBlind);
         for (SysUser u : list) {
             if (u.getPhoneCipher() != null && !u.getPhoneCipher().isBlank()) {
                 try { u.setPhoneMasked(PhoneCryptoUtil.mask(phoneCryptoUtil.decrypt(u.getPhoneCipher()))); }
@@ -82,7 +84,7 @@ public class UserController {
         }
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
-        data.put("total", userMapper.countAll(keyword));
+        data.put("total", userMapper.countAll(keyword, phoneBlind));
         return Result.success(data);
     }
 

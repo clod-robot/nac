@@ -59,13 +59,13 @@
 
     <!-- 账号管理：列表不含密码哈希 -->
     <select id="selectPage" resultMap="userMap">
-        SELECT id, username, real_name, role_code, dept, status, terminal_limit, create_time, update_time
+        SELECT id, username, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, create_time, update_time
         FROM sys_user
         <where>
             <if test="keyword != null and keyword != ''">
                 (username LIKE CONCAT('%', #{keyword}, '%')
                  OR real_name LIKE CONCAT('%', #{keyword}, '%')
-                 OR phone_blind LIKE CONCAT('%', #{keyword}, '%'))
+                 OR (#{phoneBlind} IS NOT NULL AND phone_blind = #{phoneBlind}))
             </if>
         </where>
         ORDER BY id ASC
@@ -78,7 +78,7 @@
             <if test="keyword != null and keyword != ''">
                 (username LIKE CONCAT('%', #{keyword}, '%')
                  OR real_name LIKE CONCAT('%', #{keyword}, '%')
-                 OR phone_blind LIKE CONCAT('%', #{keyword}, '%'))
+                 OR (#{phoneBlind} IS NOT NULL AND phone_blind = #{phoneBlind}))
             </if>
         </where>
     </select>
