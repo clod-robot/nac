@@ -8,6 +8,12 @@
       <el-button type="primary" size="small" @click="connect" :loading="connecting">SSH 连接</el-button>
       <el-button size="small" @click="disconnect">断开</el-button>
       <span class="status" :class="{ on: connected }">{{ connected ? '● 已连接' : '○ 未连接' }}</span>
+      <span class="zoom">
+        字号
+        <el-button size="small" circle @click="chgFont(-1)" title="缩小"><el-icon><ZoomOut /></el-icon></el-button>
+        <el-button size="small" @click="resetFont">{{ fontSize }}</el-button>
+        <el-button size="small" circle @click="chgFont(1)" title="放大"><el-icon><ZoomIn /></el-icon></el-button>
+      </span>
       <span class="tip">仅管理员可用 · 强制 SSH 登录服务器</span>
     </div>
     <div ref="termEl" class="xterm-box"></div>
@@ -26,9 +32,21 @@ const store = useUserStore()
 const termEl = ref(null)
 const connecting = ref(false)
 const connected = ref(false)
+const fontSize = ref(14)
 const conn = reactive({ host: '192.168.10.88', port: 22, username: 'mao', password: '' })
 
 let term = null, fit = null, ws = null, ro = null
+
+function applyFont() {
+  if (!term) return
+  term.options.fontSize = fontSize.value
+  try { fit && fit.fit() } catch (e) {}
+}
+function chgFont(delta) {
+  fontSize.value = Math.min(28, Math.max(10, fontSize.value + delta))
+  applyFont()
+}
+function resetFont() { fontSize.value = 14; applyFont() }
 
 onMounted(() => {
   term = new Terminal({
@@ -79,5 +97,6 @@ onBeforeUnmount(() => { disconnect(false); if (ro) ro.disconnect(); if (term) te
 .status { font-size: 12px; color: #909399; }
 .status.on { color: #67c23a; }
 .tip { color: #c0c4cc; font-size: 12px; margin-left: auto; }
+.zoom { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #909399; }
 .xterm-box { flex: 1; background: #000; padding: 8px; border-radius: 0 0 8px 8px; overflow: hidden; min-height: 420px; }
 </style>

@@ -6,7 +6,7 @@
         title="选择当前启用的短信网关并填写对应云厂商凭证。保存后立即生效，Portal 短信登录将走该网关。未填写的字段回退服务端默认配置。"
         style="margin-bottom: 16px" />
 
-      <el-form label-width="120px" style="max-width: 640px">
+      <el-form label-width="120px" style="max-width: 780px">
         <el-form-item label="启用网关">
           <el-radio-group v-model="cfg.provider">
             <el-radio value="mock">模拟（不真实发送）</el-radio>
