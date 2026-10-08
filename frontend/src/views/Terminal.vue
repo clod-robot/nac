@@ -27,6 +27,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useUserStore } from '../store/user'
+import { getNetworkInterfaces } from '../api/auth'
 
 const store = useUserStore()
 const termEl = ref(null)
@@ -62,7 +63,18 @@ onMounted(() => {
   term.onData(d => { if (ws && ws.readyState === 1) ws.send(d) })
   ro = new ResizeObserver(() => { try { fit && fit.fit() } catch (e) {} })
   ro.observe(termEl.value)
+  loadHostIp()
 })
+
+// 自动取服务器当前网口 IPv4 作为默认主机（仍可手动修改）
+async function loadHostIp() {
+  try {
+    const { data } = await getNetworkInterfaces()
+    const list = (data && data.list) || data || []
+    const it = list.find(i => i && i.ipV4 && !String(i.ipV4).startsWith('127.'))
+    if (it) conn.host = it.ipV4
+  } catch (e) { /* 取失败则保留默认值，不影响使用 */ }
+}
 
 function connect() {
   if (!conn.password) { ElMessage.warning('请输入密码'); return }
