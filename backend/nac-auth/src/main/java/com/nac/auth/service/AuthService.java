@@ -78,7 +78,9 @@ public class AuthService {
         String token = jwtUtil.generate(user.getId(), user.getUsername(), user.getRoleCode());
         redisUtil.set(RedisKeyConstants.TOKEN_PREFIX + user.getId(), token, (int) jwtUtil.getExpireSeconds());
         log.info("登录成功: user={}, ip={}", user.getUsername(), ip);
-        return new LoginVO(token, user.getUsername(), user.getRoleCode(), user.getId());
+        // 检测是否仍为默认密码 admin123，是则前端强制改密
+        boolean mustChangePwd = passwordEncoder.matches("admin123", user.getPasswordHash());
+        return new LoginVO(token, user.getUsername(), user.getRoleCode(), user.getId(), mustChangePwd);
     }
 
     public void logout(Long userId) {

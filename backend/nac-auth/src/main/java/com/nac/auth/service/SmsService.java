@@ -176,6 +176,7 @@ public class SmsService {
         String token = jwtUtil.generate(user.getId(), user.getUsername(), user.getRoleCode());
         redisUtil.set(RedisKeyConstants.TOKEN_PREFIX + user.getId(), token, (int) jwtUtil.getExpireSeconds());
         log.info("短信登录成功: userId={} ip={}", user.getId(), ip);
-        return new LoginVO(token, user.getUsername(), user.getRoleCode(), user.getId());
+        boolean mustChangePwd = passwordEncoder.matches("admin123", user.getPasswordHash());
+        return new LoginVO(token, user.getUsername(), user.getRoleCode(), user.getId(), mustChangePwd);
     }
 }

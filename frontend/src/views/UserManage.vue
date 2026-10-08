@@ -84,6 +84,11 @@
 
     <!-- 重置密码 -->
     <el-dialog v-model="resetVisible" title="重置密码" :width="isMobile ? '92%' : '380px'">
+      <el-descriptions :column="1" border size="small" style="margin-bottom:12px">
+        <el-descriptions-item label="账号">{{ resetTarget?.username || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="归属部门">{{ resetTarget?.dept || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="使用人(姓名)">{{ resetTarget?.realName || '-' }}</el-descriptions-item>
+      </el-descriptions>
       <el-input v-model="newPwd" type="password" show-password placeholder="新密码（至少 6 位）" />
       <template #footer>
         <el-button @click="resetVisible = false">取消</el-button>

@@ -6,11 +6,18 @@ import com.nac.common.context.UserContext;
 import com.nac.common.exception.BusinessException;
 import com.nac.common.result.Result;
 import com.nac.common.security.RequireRole;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,10 +31,15 @@ public class UserController {
 
     private final SysUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final ObjectProvider<KafkaTemplate<String, String>> kafkaProvider;
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String OP_TOPIC = "nac-op-log";
 
-    public UserController(SysUserMapper userMapper, PasswordEncoder passwordEncoder) {
+    public UserController(SysUserMapper userMapper, PasswordEncoder passwordEncoder,
+                          ObjectProvider<KafkaTemplate<String, String>> kafkaProvider) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
+        this.kafkaProvider = kafkaProvider;
     }
 
     @GetMapping("/list")
@@ -142,9 +154,52 @@ public class UserController {
         if (req.getPassword() == null || req.getPassword().length() < 6) {
             throw new BusinessException(400, "密码至少 6 位");
         }
+        SysUser target = userMapper.selectById(req.getId());
         userMapper.updatePassword(req.getId(), passwordEncoder.encode(req.getPassword()));
+        // 操作日志：记录本次是为“哪个部门/哪个人”的账号修改密码
+        String detail = String.format("修改账号[%s]密码，归属部门=%s，使用人=%s",
+                target != null ? nz(target.getUsername()) : req.getId(),
+                target != null ? nz(target.getDept()) : "-",
+                target != null ? nz(target.getRealName()) : "-");
+        recordOp("修改账号密码", detail);
         return Result.success();
     }
+
+    /** 写操作日志（Kafka → nac-log 落库），失败降级本地日志，不阻塞主流程 */
+    private void recordOp(String operation, String detail) {
+        try {
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("operator", nz(UserContext.getUsername()));
+            event.put("operatorId", UserContext.getUserId());
+            event.put("role", nz(UserContext.getRole()));
+            event.put("ip", clientIp());
+            event.put("operation", operation);
+            event.put("params", detail);
+            event.put("status", "SUCCESS");
+            event.put("time", System.currentTimeMillis());
+            KafkaTemplate<String, String> kafka = kafkaProvider.getIfAvailable();
+            if (kafka != null) {
+                kafka.send(OP_TOPIC, MAPPER.writeValueAsString(event));
+            }
+        } catch (Exception e) {
+            // 降级：仅本地日志
+        }
+    }
+
+    private String clientIp() {
+        try {
+            ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs == null) return "unknown";
+            HttpServletRequest r = attrs.getRequest();
+            String xff = r.getHeader("X-Forwarded-For");
+            if (xff != null && !xff.isEmpty()) return xff.split(",")[0].trim();
+            return r.getRemoteAddr();
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    private static String nz(String s) { return s == null || s.isEmpty() ? "-" : s; }
 
     @DeleteMapping("/{id}")
     @RequireRole

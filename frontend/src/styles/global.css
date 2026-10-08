@@ -1,4 +1,4 @@
-/* 全局响应式基础：不强制覆盖 Element Plus 组件样式，仅做容器级适配 */
+/* ===== 全局响应式基础 ===== */
 html,
 body,
 #app {
@@ -8,26 +8,85 @@ body,
 }
 
 body {
-  /* 兼容不支持 dvh 的老浏览器，回退到 100vh */
   min-height: 100vh;
   min-height: 100dvh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   background: #f0f2f5;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
   box-sizing: border-box;
 }
 
-/* 内容区在窄屏可横向滚动，避免表格被挤压 */
+/* 内容区窄屏可横向滚动，避免表格被挤压 */
 .el-main {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 表格在小屏保持最小宽度并整体横向滚动，不压扁列 */
+.el-table {
+  width: 100%;
+}
+
+/* 卡片内表格容器：窄屏允许横向滚动 */
+.el-card__body {
   overflow-x: auto;
 }
 
-/* 小屏统一收紧外边距，避免卡片贴边溢出 */
+/* 搜索/操作工具栏允许换行，避免窄屏溢出 */
+.card-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 分页居中，窄屏紧凑 */
+.el-pagination {
+  justify-content: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* 弹窗窄屏自适应 */
+.el-dialog {
+  max-width: calc(100vw - 24px);
+  margin-top: 6vh !important;
+}
+
+/* 表单标签窄屏左对齐更紧凑 */
 @media (max-width: 768px) {
   .el-main {
+    padding: 10px;
+  }
+  .el-card__header {
+    padding: 12px 14px;
+  }
+  .el-card__body {
     padding: 12px;
+  }
+  .el-form-item__label {
+    font-size: 13px;
+  }
+  /* 移动端点击区域更友好 */
+  .el-button {
+    min-height: 32px;
+  }
+}
+
+/* 平板：侧边栏收起阈值由 JS(isNarrow<992) 控制，这里收紧间距 */
+@media (min-width: 769px) and (max-width: 1200px) {
+  .el-main {
+    padding: 14px;
+  }
+}
+
+/* 大屏：内容区最大宽度居中，避免超宽屏表格过散 */
+@media (min-width: 1920px) {
+  .el-main > .el-card {
+    max-width: 1760px;
   }
 }

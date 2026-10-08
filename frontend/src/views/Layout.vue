@@ -31,7 +31,7 @@
           </el-tooltip>
           <el-tooltip :content="`NTP 服务器：${ntp}`" placement="bottom">
             <span class="sys-ntp" @click="openNtp">
-              <el-icon><Clock /></el-icon>NTP：{{ ntp }}<el-icon><Edit /></el-icon>
+              <el-icon><Clock /></el-icon><span class="ntp-text">NTP：{{ ntp }}</span><el-icon><Edit /></el-icon>
             </span>
           </el-tooltip>
           <el-dropdown @command="onCmd">
@@ -75,6 +75,21 @@
         <el-menu-item v-permission="['admin']" index="/terminal"><el-icon><Connection /></el-icon><span>远程终端</span></el-menu-item>
       </el-menu>
     </el-drawer>
+    <!-- 强制修改默认密码：仍为 admin123 时阻断使用，关闭即登出 -->
+    <el-dialog v-model="forcePwdVisible" title="请修改默认密码" width="420px"
+      :close-on-click-modal="false" :show-close="false" :close-on-press-escape="false"
+      @close="onForceClose">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom:14px"
+        title="检测到您仍在使用默认密码 admin123，为保障系统安全，请立即修改后再使用系统。" />
+      <el-form label-width="90px">
+        <el-form-item label="当前账号"><el-input :model-value="store.username" disabled /></el-form-item>
+        <el-form-item label="新密码"><el-input v-model="newPwd" type="password" show-password placeholder="至少 6 位，请勿再用 admin123" /></el-form-item>
+        <el-form-item label="确认密码"><el-input v-model="newPwd2" type="password" show-password placeholder="再次输入新密码" @keyup.enter="submitForcePwd" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button type="primary" :loading="forceSaving" @click="submitForcePwd">确认修改</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
@@ -84,7 +99,7 @@ import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Odometer, Setting, Message, Document, Tickets, Monitor, Connection, ArrowDown, Key, Menu, User, Share, Clock, Edit } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
-import { logout, getSystemInfo, setSystemNtp } from '../api/auth'
+import { logout, getSystemInfo, setSystemNtp, userResetPassword } from '../api/auth'
 import { useBreakpoints } from '../composables/useBreakpoints'
 import { useIdleTimeout } from '../composables/useIdleTimeout'
 
@@ -92,6 +107,12 @@ const router = useRouter()
 const store = useUserStore()
 const { isNarrow } = useBreakpoints()
 const drawer = ref(false)
+
+// 强制修改默认密码
+const forcePwdVisible = ref(false)
+const newPwd = ref('')
+const newPwd2 = ref('')
+const forceSaving = ref(false)
 
 // 服务器时间（按服务器时区实时走时）与 NTP
 const clock = ref('--')
@@ -137,8 +158,32 @@ onMounted(() => {
   refresh()
   tickTimer = setInterval(() => { clock.value = fmtServer(Date.now() + offsetMs) }, 1000)
   syncTimer = setInterval(refresh, 60000) // 每分钟与服务器对齐，修正漂移
+  // 仍为默认密码则强制改密
+  if (store.mustChangePwd) { forcePwdVisible.value = true }
 })
 onUnmounted(() => { clearInterval(tickTimer); clearInterval(syncTimer) })
+
+async function submitForcePwd() {
+  if (!newPwd.value || newPwd.value.length < 6) { ElMessage.warning('新密码至少 6 位'); return }
+  if (newPwd.value === 'admin123') { ElMessage.warning('不能继续使用默认密码 admin123'); return }
+  if (newPwd.value !== newPwd2.value) { ElMessage.warning('两次输入的密码不一致'); return }
+  forceSaving.value = true
+  try {
+    await userResetPassword({ id: store.userId, password: newPwd.value })
+    store.clearMustChangePwd()
+    ElMessage.success('密码修改成功，请妥善保管')
+    forcePwdVisible.value = false
+  } catch (e) {
+    ElMessage.error('修改失败：' + (e?.response?.data?.message || e.message))
+  } finally { forceSaving.value = false }
+}
+function onForceClose() {
+  // 未完成改密而关闭弹窗 → 强制登出
+  if (store.mustChangePwd) {
+    store.logout()
+    router.replace('/login')
+  }
+}
 
 // 30 分钟无操作自动退出系统
 useIdleTimeout(async () => {
@@ -162,16 +207,27 @@ async function onCmd(c) {
 .layout { height: 100vh; height: 100dvh; }
 .aside { background: #1f2d3d; }
 .logo { height: 60px; line-height: 60px; color: #fff; text-align: center; font-weight: 600; }
-.header { display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid #eee; padding: 0 16px; }
-.header-left { display: flex; align-items: center; gap: 10px; }
-.header-right { display: flex; align-items: center; gap: 18px; }
-.sys-clock { font-variant-numeric: tabular-nums; font-weight: 600; color: #303133; cursor: pointer; letter-spacing: .5px; }
-.sys-ntp { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #606266; cursor: pointer; }
+.header { display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid #eee; padding: 0 16px; gap: 8px; }
+.header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.header-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; justify-content: flex-end; }
+.sys-clock { font-variant-numeric: tabular-nums; font-weight: 600; color: #303133; cursor: pointer; letter-spacing: .5px; white-space: nowrap; }
+.sys-ntp { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #606266; cursor: pointer; white-space: nowrap; }
 .sys-ntp:hover { color: #409EFF; }
 .ntp-tip { color: #909399; font-size: 12px; margin-top: 8px; }
 .menu-btn { font-size: 20px; cursor: pointer; color: #303133; }
 .m-logo { font-weight: 600; color: #303133; }
 .user { cursor: pointer; white-space: nowrap; }
+/* 窄屏精简：<=640 隐藏时钟/仅留 NTP 图标，避免页头溢出 */
+@media (max-width: 640px) {
+  .header { padding: 6px 10px; }
+  .header-right { gap: 10px; }
+  .sys-clock { display: none; }
+  .sys-ntp .ntp-text { display: none; }
+  .sys-ntp { font-size: 0; }
+  .m-logo { font-size: 15px; }
+}
+/* 强制改密遮罩：未改密前不允许操作页面 */
+.must-change-mask { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
 </style>
 
 <style>
