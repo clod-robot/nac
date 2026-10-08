@@ -12,8 +12,8 @@ public enum ResultCode {
     TOO_MANY_REQUESTS(429, "请求过于频繁，请稍后再试"),
     SERVER_ERROR(500, "服务器内部错误"),
 
-    CAPTCHA_INVALID(1001, "图形验证码错误或已失效"),
-    USERNAME_OR_PASSWORD_ERROR(1002, "用户名或密码错误"),
+    CAPTCHA_INVALID(1001, "验证码不对"),
+    USERNAME_OR_PASSWORD_ERROR(1002, "账号或密码不对"),
     ACCOUNT_LOCKED(1003, "账号已锁定，请稍后再试"),
     IP_LOCKED(1004, "当前 IP 登录失败过多，已临时锁定"),
     SMS_CODE_INVALID(1005, "短信验证码错误或已失效"),
