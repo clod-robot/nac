@@ -54,7 +54,7 @@ public class LogController {
         return Result.success(data);
     }
 
-    /** 认证日志（login/portal/radius），支持按类型、结果、用户、MAC、终端IP筛选 */
+    /** 认证日志（login/portal/radius），支持按类型、结果、用户、MAC、终端IP、时间范围筛选 */
     @GetMapping("/auth-list")
     @RequireRole("admin")
     public Result<Map<String, Object>> authList(@RequestParam(defaultValue = "1") int page,
@@ -63,12 +63,18 @@ public class LogController {
                                                 @RequestParam(required = false) Integer result,
                                                 @RequestParam(required = false) String username,
                                                 @RequestParam(required = false) String mac,
-                                                @RequestParam(required = false) String ip) {
+                                                @RequestParam(required = false) String ip,
+                                                @RequestParam(required = false) String startTime,
+                                                @RequestParam(required = false) String endTime) {
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
         int offset = (page - 1) * size;
-        List<AuthLog> list = authLogMapper.selectPage(offset, size, type, result, trim(username), trim(mac), trim(ip));
-        long total = authLogMapper.countAll(type, result, trim(username), trim(mac), trim(ip));
+        String st = trim(startTime);
+        String et = trim(endTime);
+        // 前端精确到分(yyyy-MM-dd HH:mm)，结束时间补秒以覆盖该分钟内全部记录
+        if (et != null && et.length() == 16) et = et + ":59";
+        List<AuthLog> list = authLogMapper.selectPage(offset, size, type, result, trim(username), trim(mac), trim(ip), st, et);
+        long total = authLogMapper.countAll(type, result, trim(username), trim(mac), trim(ip), st, et);
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
         data.put("total", total);

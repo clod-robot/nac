@@ -18,7 +18,9 @@
       <el-table-column prop="nasIp" label="NAS IP" width="130" />
       <el-table-column prop="framedIp" label="终端IP" width="130" />
       <el-table-column prop="vlanId" label="VLAN" width="70" />
-      <el-table-column prop="startTime" label="上线时间" width="170" />
+      <el-table-column label="上线时间" width="150">
+        <template #default="{ row }">{{ fmt(row.startTime) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="110" fixed="right">
         <template #default="{ row }">
           <el-popconfirm title="确认强制该终端下线？" @confirm="offline(row)">
@@ -42,6 +44,8 @@ import { onlineList, onlineDelete } from '../api/auth'
 const list = ref([]); const total = ref(0); const page = ref(1); const size = ref(20)
 const loading = ref(false)
 const f = ref({ username: '', mac: '', ip: '' })
+const pad = (n) => String(n).padStart(2, '0')
+const fmt = (t) => { if (!t) return '-'; const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}` }
 
 async function load() {
   loading.value = true

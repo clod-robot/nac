@@ -10,8 +10,10 @@ import java.util.List;
 public interface AuthLogMapper {
     List<AuthLog> selectPage(@Param("offset") int offset, @Param("size") int size,
                              @Param("authType") String authType, @Param("result") Integer result,
-                             @Param("username") String username, @Param("mac") String mac, @Param("ip") String ip);
+                             @Param("username") String username, @Param("mac") String mac, @Param("ip") String ip,
+                             @Param("startTime") String startTime, @Param("endTime") String endTime);
 
     long countAll(@Param("authType") String authType, @Param("result") Integer result,
-                  @Param("username") String username, @Param("mac") String mac, @Param("ip") String ip);
+                  @Param("username") String username, @Param("mac") String mac, @Param("ip") String ip,
+                  @Param("startTime") String startTime, @Param("endTime") String endTime);
 }

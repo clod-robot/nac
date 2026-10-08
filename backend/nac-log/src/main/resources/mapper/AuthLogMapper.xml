@@ -11,6 +11,8 @@
             <if test="username != null and username != ''">AND (username LIKE CONCAT('%',#{username},'%') OR phone LIKE CONCAT('%',#{username},'%'))</if>
             <if test="mac != null and mac != ''">AND mac LIKE CONCAT('%',#{mac},'%')</if>
             <if test="ip != null and ip != ''">AND ip LIKE CONCAT('%',#{ip},'%')</if>
+            <if test="startTime != null and startTime != ''">AND auth_time &gt;= #{startTime}</if>
+            <if test="endTime != null and endTime != ''">AND auth_time &lt;= #{endTime}</if>
         </where>
     </sql>
 
