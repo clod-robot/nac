@@ -5,10 +5,12 @@ import com.nac.auth.mapper.SysUserMapper;
 import com.nac.common.context.UserContext;
 import com.nac.common.exception.BusinessException;
 import com.nac.common.result.Result;
+import com.nac.common.security.PhoneCryptoUtil;
 import com.nac.common.security.RequireRole;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -16,10 +18,15 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * 后台账号管理（仅 admin）：列表、新增、启用/禁用、终端上限、重置密码、删除。
@@ -31,15 +38,32 @@ public class UserController {
 
     private final SysUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final PhoneCryptoUtil phoneCryptoUtil;
     private final ObjectProvider<KafkaTemplate<String, String>> kafkaProvider;
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String OP_TOPIC = "nac-op-log";
+    private static final Pattern PHONE_RE = Pattern.compile("^\\d{6,15}$");
 
-    public UserController(SysUserMapper userMapper, PasswordEncoder passwordEncoder,
+    @Value("${nac.crypto.phone-password:NcePhone@2026}")
+    private String blindSecret;
+
+    public UserController(SysUserMapper userMapper, PasswordEncoder passwordEncoder, PhoneCryptoUtil phoneCryptoUtil,
                           ObjectProvider<KafkaTemplate<String, String>> kafkaProvider) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
+        this.phoneCryptoUtil = phoneCryptoUtil;
         this.kafkaProvider = kafkaProvider;
+    }
+
+    /** 手机号盲索引（与短信登录口径一致），用于唯一性校验与检索 */
+    private String blindIndex(String phone) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(blindSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return HexFormat.of().formatHex(mac.doFinal(phone.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("盲索引计算失败", e);
+        }
     }
 
     @GetMapping("/list")
@@ -50,6 +74,12 @@ public class UserController {
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
         List<SysUser> list = userMapper.selectPage((page - 1) * size, size, keyword);
+        for (SysUser u : list) {
+            if (u.getPhoneCipher() != null && !u.getPhoneCipher().isBlank()) {
+                try { u.setPhoneMasked(PhoneCryptoUtil.mask(phoneCryptoUtil.decrypt(u.getPhoneCipher()))); }
+                catch (Exception ignore) {}
+            }
+        }
         Map<String, Object> data = new HashMap<>();
         data.put("list", list);
         data.put("total", userMapper.countAll(keyword));
@@ -59,9 +89,10 @@ public class UserController {
     @Data
     public static class CreateReq {
         private String username;
-        private String password;
+        private String password; // 留空则使用默认密码 admin123，首次登录强制修改
         private String realName;
         private String dept;
+        private String phone; // 联系电话/手机号
         private String roleCode;
         private Integer terminalLimit;
     }
@@ -72,7 +103,9 @@ public class UserController {
         if (req.getUsername() == null || req.getUsername().trim().isEmpty()) {
             throw new BusinessException(400, "账号不能为空");
         }
-        if (req.getPassword() == null || req.getPassword().length() < 6) {
+        // 密码留空 → 默认 admin123，首次登录强制修改（与管理员账号口径一致）
+        String rawPwd = (req.getPassword() == null || req.getPassword().isBlank()) ? "admin123" : req.getPassword();
+        if (rawPwd.length() < 6) {
             throw new BusinessException(400, "密码至少 6 位");
         }
         if (userMapper.selectByUsername(req.getUsername().trim()) != null) {
@@ -80,9 +113,22 @@ public class UserController {
         }
         SysUser u = new SysUser();
         u.setUsername(req.getUsername().trim());
-        u.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+        u.setPasswordHash(passwordEncoder.encode(rawPwd));
         u.setRealName(req.getRealName());
         u.setDept(req.getDept());
+        // 联系电话：校验 + 唯一性（盲索引）+ 加密存储，不存明文
+        if (req.getPhone() != null && !req.getPhone().isBlank()) {
+            String phone = req.getPhone().trim();
+            if (!PHONE_RE.matcher(phone).matches()) {
+                throw new BusinessException(400, "联系电话格式不正确");
+            }
+            String blind = blindIndex(phone);
+            if (userMapper.selectByPhoneBlind(blind) != null) {
+                throw new BusinessException(400, "该联系电话已被使用");
+            }
+            u.setPhoneCipher(phoneCryptoUtil.encrypt(phone));
+            u.setPhoneBlind(blind);
+        }
         u.setRoleCode((req.getRoleCode() == null || req.getRoleCode().isBlank()) ? "user" : req.getRoleCode());
         u.setStatus(1);
         u.setTerminalLimit(req.getTerminalLimit() == null ? 5 : req.getTerminalLimit());
@@ -147,13 +193,26 @@ public class UserController {
         private Long id;
         private String dept;
         private String realName;
+        private String phone; // 联系电话，留空表示不修改
     }
 
-    /** 更新账号资料：归属部门 + 使用人(姓名)。首次设置管理员账号归属时使用。 */
+    /** 更新账号资料：归属部门 + 使用人(姓名) + 联系电话（含 admin）。 */
     @PutMapping("/profile")
     @RequireRole
     public Result<Void> profile(@RequestBody ProfileReq req) {
         userMapper.updateProfile(req.getId(), req.getDept(), req.getRealName());
+        if (req.getPhone() != null && !req.getPhone().isBlank()) {
+            String phone = req.getPhone().trim();
+            if (!PHONE_RE.matcher(phone).matches()) {
+                throw new BusinessException(400, "联系电话格式不正确");
+            }
+            String blind = blindIndex(phone);
+            SysUser exist = userMapper.selectByPhoneBlind(blind);
+            if (exist != null && !exist.getId().equals(req.getId())) {
+                throw new BusinessException(400, "该联系电话已被使用");
+            }
+            userMapper.updatePhone(req.getId(), phoneCryptoUtil.encrypt(phone), blind);
+        }
         return Result.success();
     }
 

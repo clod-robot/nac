@@ -37,6 +37,9 @@ public interface SysUserMapper {
     /** 更新归属部门与使用人(姓名) */
     int updateProfile(@Param("id") Long id, @Param("dept") String dept, @Param("realName") String realName);
 
+    /** 更新联系电话（密文 + 盲索引），传 null 表示清空 */
+    int updatePhone(@Param("id") Long id, @Param("phoneCipher") String phoneCipher, @Param("phoneBlind") String phoneBlind);
+
     int deleteById(@Param("id") Long id);
 
     long countAdmin();
