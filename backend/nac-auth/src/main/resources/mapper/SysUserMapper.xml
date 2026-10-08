@@ -99,6 +99,10 @@
         UPDATE sys_user SET dept = #{dept} WHERE id = #{id}
     </update>
 
+    <update id="updateProfile">
+        UPDATE sys_user SET dept = #{dept}, real_name = #{realName} WHERE id = #{id}
+    </update>
+
     <delete id="deleteById">
         DELETE FROM sys_user WHERE id = #{id}
     </delete>

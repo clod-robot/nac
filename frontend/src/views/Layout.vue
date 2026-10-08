@@ -76,18 +76,24 @@
       </el-menu>
     </el-drawer>
     <!-- 强制修改默认密码：仍为 admin123 时阻断使用，关闭即登出 -->
-    <el-dialog v-model="forcePwdVisible" title="请修改默认密码" width="420px"
+    <el-dialog v-model="forcePwdVisible" title="首次登录：设置管理员归属并修改默认密码" width="440px"
       :close-on-click-modal="false" :show-close="false" :close-on-press-escape="false"
       @close="onForceClose">
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:14px"
-        title="检测到您仍在使用默认密码 admin123，为保障系统安全，请立即修改后再使用系统。" />
-      <el-form label-width="90px">
+        title="检测到您仍在使用默认密码 admin123。请先设置该管理员账号归属哪个部门、哪个人使用，并修改密码后再进入系统。" />
+      <el-form label-width="100px">
         <el-form-item label="当前账号"><el-input :model-value="store.username" disabled /></el-form-item>
+        <el-form-item label="归属部门" required>
+          <el-input v-model="adminDept" placeholder="如：信息中心" />
+        </el-form-item>
+        <el-form-item label="使用人(姓名)" required>
+          <el-input v-model="adminRealName" placeholder="请填写实际领用人姓名" />
+        </el-form-item>
         <el-form-item label="新密码"><el-input v-model="newPwd" type="password" show-password placeholder="至少 6 位，请勿再用 admin123" /></el-form-item>
         <el-form-item label="确认密码"><el-input v-model="newPwd2" type="password" show-password placeholder="再次输入新密码" @keyup.enter="submitForcePwd" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button type="primary" :loading="forceSaving" @click="submitForcePwd">确认修改</el-button>
+        <el-button type="primary" :loading="forceSaving" @click="submitForcePwd">确认并进入系统</el-button>
       </template>
     </el-dialog>
   </el-container>
@@ -99,7 +105,7 @@ import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Odometer, Setting, Message, Document, Tickets, Monitor, Connection, ArrowDown, Key, Menu, User, Share, Clock, Edit } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
-import { logout, getSystemInfo, setSystemNtp, userResetPassword } from '../api/auth'
+import { logout, getSystemInfo, setSystemNtp, userResetPassword, userUpdateProfile } from '../api/auth'
 import { useBreakpoints } from '../composables/useBreakpoints'
 import { useIdleTimeout } from '../composables/useIdleTimeout'
 
@@ -113,6 +119,8 @@ const forcePwdVisible = ref(false)
 const newPwd = ref('')
 const newPwd2 = ref('')
 const forceSaving = ref(false)
+const adminDept = ref('')
+const adminRealName = ref('')
 
 // 服务器时间（按服务器时区实时走时）与 NTP
 const clock = ref('--')
@@ -164,17 +172,22 @@ onMounted(() => {
 onUnmounted(() => { clearInterval(tickTimer); clearInterval(syncTimer) })
 
 async function submitForcePwd() {
+  if (!adminDept.value.trim()) { ElMessage.warning('请填写归属部门'); return }
+  if (!adminRealName.value.trim()) { ElMessage.warning('请填写使用人(姓名)'); return }
   if (!newPwd.value || newPwd.value.length < 6) { ElMessage.warning('新密码至少 6 位'); return }
   if (newPwd.value === 'admin123') { ElMessage.warning('不能继续使用默认密码 admin123'); return }
   if (newPwd.value !== newPwd2.value) { ElMessage.warning('两次输入的密码不一致'); return }
   forceSaving.value = true
   try {
+    // 1) 设置管理员账号归属（部门 + 使用人）
+    await userUpdateProfile({ id: store.userId, dept: adminDept.value.trim(), realName: adminRealName.value.trim() })
+    // 2) 修改默认密码
     await userResetPassword({ id: store.userId, password: newPwd.value })
     store.clearMustChangePwd()
-    ElMessage.success('密码修改成功，请妥善保管')
+    ElMessage.success('已设置归属并修改密码，请妥善保管')
     forcePwdVisible.value = false
   } catch (e) {
-    ElMessage.error('修改失败：' + (e?.response?.data?.message || e.message))
+    ElMessage.error('保存失败：' + (e?.response?.data?.message || e.message))
   } finally { forceSaving.value = false }
 }
 function onForceClose() {

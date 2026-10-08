@@ -34,6 +34,9 @@ public interface SysUserMapper {
 
     int updateDept(@Param("id") Long id, @Param("dept") String dept);
 
+    /** 更新归属部门与使用人(姓名) */
+    int updateProfile(@Param("id") Long id, @Param("dept") String dept, @Param("realName") String realName);
+
     int deleteById(@Param("id") Long id);
 
     long countAdmin();

@@ -143,6 +143,21 @@ public class UserController {
     }
 
     @Data
+    public static class ProfileReq {
+        private Long id;
+        private String dept;
+        private String realName;
+    }
+
+    /** 更新账号资料：归属部门 + 使用人(姓名)。首次设置管理员账号归属时使用。 */
+    @PutMapping("/profile")
+    @RequireRole
+    public Result<Void> profile(@RequestBody ProfileReq req) {
+        userMapper.updateProfile(req.getId(), req.getDept(), req.getRealName());
+        return Result.success();
+    }
+
+    @Data
     public static class PwdReq {
         private Long id;
         private String password;
