@@ -61,6 +61,10 @@ public class EapTlsSupport {
         SSLEngine engine = sslContext.createSSLEngine();
         engine.setUseClientMode(false);
         engine.setNeedClientAuth(needClientAuth);
+        // 强制 TLS 1.2：EAP-TLS 业界主流实现（含 OpenSSL 1.1.1 类客户端）对 TLS 1.3 互操作兼容性差，
+        // 强制 1.2 可避免客户端 ssl3_get_record:wrong version number 等解析失败。
+        engine.setEnabledProtocols(new String[]{"TLSv1.2"});
+        log.info("EAP-TLS 新会话 启用协议={} 套件数={}", java.util.Arrays.toString(engine.getEnabledProtocols()), engine.getEnabledCipherSuites().length);
         Session s = new Session(engine, needClientAuth);
         String id = randomId();
         sessions.put(id, s);
@@ -140,38 +144,42 @@ public class EapTlsSupport {
         catch (Exception e) { return false; }
     }
 
-    /** 构造 EAP-TLS 数据字段：flags[+len]+payload，按 FRAGMENT 分片。返回 EAP data（不含 EAP 头）列表。 */
+    /** 构造 EAP-TLS 数据字段：flags[+len]+payload，按 FRAGMENT 分片。返回 EAP data（不含 EAP 头）列表。
+     *  RFC 5216：仅首片携带 L 标志与 4 字节【总长度】，后续分片不含长度字段；S 标志置首片，M 标志置非末片。 */
     public byte[][] fragmentForEap(byte[] tls) {
         if (tls == null) tls = new byte[0];
         if (tls.length <= FRAGMENT) {
-            return new byte[][]{eapTlsData(tls, false, false, false)};
+            return new byte[][]{eapTlsData(tls, 0, -1)};
         }
         int n = (tls.length + FRAGMENT - 1) / FRAGMENT;
         byte[][] out = new byte[n][];
+        int total = tls.length;
         for (int i = 0; i < n; i++) {
             int from = i * FRAGMENT;
             int len = Math.min(FRAGMENT, tls.length - from);
             byte[] part = new byte[len];
             System.arraycopy(tls, from, part, 0, len);
             boolean more = i < n - 1;
-            boolean start = i == 0;
-            out[i] = eapTlsData(part, more, start, true);
+            if (i == 0) {
+                // RFC 5216：首片携带 L 标志与 4 字节【总长度】；S 标志仅用于会话起始(空数据)报文，
+                // 数据分片不得置 S，否则部分客户端会误判为重新开始而重置 TLS 状态。
+                int flags = 0x80 /*L*/ | (more ? 0x40 /*M*/ : 0);
+                out[i] = eapTlsData(part, flags, total);
+            } else {
+                int flags = more ? 0x40 /*M*/ : 0;
+                out[i] = eapTlsData(part, flags, -1);
+            }
         }
         return out;
     }
 
-    /** flags: S(0x20) M(0x40) L(0x80)。L=1 时附带 4 字节总长度。 */
-    private byte[] eapTlsData(byte[] payload, boolean moreFragments, boolean start, boolean includeLength) {
-        int flags = 0;
-        if (start) flags |= 0x20;
-        if (moreFragments) flags |= 0x40;
-        if (includeLength) flags |= 0x80;
+    /** flags: S(0x20) M(0x40) L(0x80)。totalLen>=0 时附带 4 字节总长度（仅首片）。 */
+    private byte[] eapTlsData(byte[] payload, int flags, int totalLen) {
         ByteArrayOutputStream o = new ByteArrayOutputStream();
         o.write(flags);
-        if (includeLength) {
-            int total = payload.length; // 简化：每片写入本片长度（兼容多数实现对长度字段的宽松处理）
-            o.write((total >>> 24) & 0xFF); o.write((total >>> 16) & 0xFF);
-            o.write((total >>> 8) & 0xFF); o.write(total & 0xFF);
+        if (totalLen >= 0) {
+            o.write((totalLen >>> 24) & 0xFF); o.write((totalLen >>> 16) & 0xFF);
+            o.write((totalLen >>> 8) & 0xFF); o.write(totalLen & 0xFF);
         }
         o.writeBytes(payload);
         return o.toByteArray();

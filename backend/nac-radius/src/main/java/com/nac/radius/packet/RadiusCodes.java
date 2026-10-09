@@ -46,7 +46,8 @@ public final class RadiusCodes {
     public static final int REPLY_MESSAGE = 18;
     public static final int SESSION_TIMEOUT = 27;
     public static final int STATE = 24; // EAP 挑战态，NAS 原样回传
-    public static final int EAP_MESSAGE = 87; // 802.1X EAP 载荷 (RFC 3579 / 2869 属性号 87，非 79)
+    public static final int EAP_MESSAGE = 87; // 802.1X EAP 载荷 (RFC 3579 / 2869 属性号 87)
+    public static final int EAP_MESSAGE_ALT = 79; // 部分厂商(华为)将 EAP 放在 79，87 另作私有端口信息
     public static final int MESSAGE_AUTHENTICATOR = 80; // EAP 报文完整性（HMAC-MD5）
     public static final int TUNNEL_TYPE = 64;
     public static final int TUNNEL_MEDIUM_TYPE = 65;

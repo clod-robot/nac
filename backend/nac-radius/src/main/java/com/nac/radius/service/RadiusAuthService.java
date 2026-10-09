@@ -113,8 +113,8 @@ public class RadiusAuthService {
             return reject;
         }
 
-        // 802.1X：请求携带 EAP-Message 时走 EAP 状态机（当前实现 EAP-MD5，RFC 3748/2869）
-        if (request.getAttr(RadiusCodes.EAP_MESSAGE) != null) {
+        // 802.1X：请求携带 EAP-Message 时走 EAP 状态机（自动识别 EAP 在标准 87 或厂商 79）
+        if (request.hasEap()) {
             return handleEap(request, user);
         }
 
@@ -154,12 +154,16 @@ public class RadiusAuthService {
         int code = eap[0] & 0xFF;
         int id = eap[1] & 0xFF;
         int len = ((eap[2] & 0xFF) << 8) | (eap[3] & 0xFF);
-        if (len < 4 || len > eap.length) return eapReject(request, user, "bad eap length", id);
+        if (len < 4 || len > eap.length) {
+            log.warn("RADIUS EAP 长度异常: len={} eapLen={} eapType={}", len, eap.length, request.eapAttributeType());
+            return eapReject(request, user, "bad eap length", id);
+        }
         int type = (code == RadiusCodes.EAP_REQUEST || code == RadiusCodes.EAP_RESPONSE) && eap.length >= 5 ? (eap[4] & 0xFF) : -1;
 
         // Response/Identity -> 按配置下发对应 EAP 方法
         if (code == RadiusCodes.EAP_RESPONSE && type == RadiusCodes.EAP_TYPE_IDENTITY) {
             String method = props.getEapMethod() == null ? "MD5" : props.getEapMethod().trim().toUpperCase();
+            log.info("RADIUS EAP-Identity: user={} eapTypeAttr={} configuredMethod={}", mask(user.getUsername()), request.eapAttributeType(), method);
             if (method.equals("TLS") || method.equals("PEAP")) {
                 return startTls(request, user, method.equals("PEAP"), id);
             }
@@ -175,7 +179,7 @@ public class RadiusAuthService {
             eapReq[5] = 16;
             System.arraycopy(challenge, 0, eapReq, 6, 16);
             RadiusPacket ch = new RadiusPacket(RadiusCodes.ACCESS_CHALLENGE, request.getIdentifier(), null);
-            ch.addAttribute(RadiusCodes.EAP_MESSAGE, eapReq);
+            ch.addAttribute(eapTypeOf(request), eapReq);
             ch.addAttribute(RadiusCodes.STATE, challenge);
             ch.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
             return ch;
@@ -203,7 +207,7 @@ public class RadiusAuthService {
             }
             clearFailures(user.getUsername());
             RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
-            accept.addAttribute(RadiusCodes.EAP_MESSAGE, eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
+            accept.addAttribute(eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
             accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
             if (props.getVlanId() > 0) {
                 accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
@@ -313,7 +317,7 @@ public class RadiusAuthService {
     private RadiusPacket tlsAccept(RadiusPacket request, RadiusUser user, String method) {
         clearFailures(user.getUsername());
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
-        accept.addAttribute(RadiusCodes.EAP_MESSAGE, eapPacket(RadiusCodes.EAP_SUCCESS, request.getIdentifier(), null));
+        accept.addAttribute(eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, request.getIdentifier(), null));
         accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
         if (props.getVlanId() > 0) {
             accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
@@ -374,7 +378,7 @@ public class RadiusAuthService {
 
     private RadiusPacket tlsChallenge(RadiusPacket request, String sid, byte[] eapReq) {
         RadiusPacket ch = new RadiusPacket(RadiusCodes.ACCESS_CHALLENGE, request.getIdentifier(), null);
-        ch.addAttribute(RadiusCodes.EAP_MESSAGE, eapReq);
+        ch.addAttribute(eapTypeOf(request), eapReq);
         ch.addAttribute(RadiusCodes.STATE, sid.getBytes(StandardCharsets.UTF_8));
         ch.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
         return ch;
@@ -388,9 +392,9 @@ public class RadiusAuthService {
         return d;
     }
 
-    /** 拼接请求中所有 EAP-Message 属性（跨属性分片）为一个 EAP 报文。 */
+    /** 拼接请求中所有 EAP-Message 属性（跨属性分片）为一个 EAP 报文，按请求实际 EAP 类型取。 */
     private byte[] concatEap(RadiusPacket request) {
-        List<byte[]> parts = request.getAttributes().get(RadiusCodes.EAP_MESSAGE);
+        List<byte[]> parts = request.eapValues();
         if (parts == null || parts.isEmpty()) return null;
         if (parts.size() == 1) return parts.get(0);
         int total = 0;
@@ -399,6 +403,17 @@ public class RadiusAuthService {
         int off = 0;
         for (byte[] p : parts) { System.arraycopy(p, 0, out, off, p.length); off += p.length; }
         return out;
+    }
+
+    /**
+     * 出站 EAP 回包的属性号跟随请求实际承载 EAP 的类型（标准 79 或厂商 87）。
+     * 迈普及多数国产交换机在 EAP 中继模式下请求/响应均使用标准 79；
+     * 跟随请求可确保与对端一致，避免对端在响应中找不到 EAP-Message 而丢弃。
+     * 若无法识别则回退标准 79。
+     */
+    private int eapTypeOf(RadiusPacket request) {
+        int t = request.eapAttributeType();
+        return t > 0 ? t : RadiusCodes.EAP_MESSAGE_ALT;
     }
     private byte[] eapPacket(int code, int id, byte[] data) {
         int len = 4 + (data == null ? 0 : data.length);
@@ -414,7 +429,7 @@ public class RadiusAuthService {
     /** 构造带 EAP-Failure 与 Message-Authenticator 的拒绝响应。 */
     private RadiusPacket eapReject(RadiusPacket request, RadiusUser user, String msg, int eapId) {
         RadiusPacket reject = new RadiusPacket(RadiusCodes.ACCESS_REJECT, request.getIdentifier(), null);
-        reject.addAttribute(RadiusCodes.EAP_MESSAGE, eapPacket(RadiusCodes.EAP_FAILURE, eapId, null));
+        reject.addAttribute(eapTypeOf(request), eapPacket(RadiusCodes.EAP_FAILURE, eapId, null));
         reject.addString(RadiusCodes.REPLY_MESSAGE, msg);
         reject.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
         recordAuth(request, 0, "EAP: " + msg);

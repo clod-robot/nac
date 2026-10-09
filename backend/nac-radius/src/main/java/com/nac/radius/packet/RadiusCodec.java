@@ -51,13 +51,15 @@ public final class RadiusCodec {
         out[1] = response.getIdentifier();
         out[2] = (byte) (total >>> 8);
         out[3] = (byte) total;
-        // 先填空认证符参与计算
+        // RA 占位先用请求认证符；先回填 Message-Authenticator（HMAC 基于 RA=请求认证符、MA 置零）
         System.arraycopy(requestAuthenticator, 0, out, 4, AUTH_LEN);
         System.arraycopy(attrs, 0, out, 20, attrs.length);
-        byte[] ra = md5(concat(out, sharedSecret.getBytes(StandardCharsets.UTF_8)));
-        System.arraycopy(ra, 0, out, 4, AUTH_LEN);
         // 若包含 Message-Authenticator(80) 占位（16 字节 0），按 RFC 3579 计算 HMAC-MD5 回填
         fillMessageAuthenticator(out, sharedSecret);
+        // Response-Authenticator 必须覆盖含真实 MA 的属性（RFC 2865 / freeRADIUS 顺序），
+        // 否则严格校验 RA 的交换机（如迈普）会判响应非法并丢弃。
+        byte[] ra = md5(concat(out, sharedSecret.getBytes(StandardCharsets.UTF_8)));
+        System.arraycopy(ra, 0, out, 4, AUTH_LEN);
         return out;
     }
 

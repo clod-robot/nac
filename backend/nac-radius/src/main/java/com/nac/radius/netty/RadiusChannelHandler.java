@@ -56,7 +56,7 @@ public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPa
         request.setSender(msg.sender());
 
         // 入站 EAP 报文必须携带合法 Message-Authenticator（RFC 3579），否则丢弃，防篡改/伪造
-        if (request.getAttr(RadiusCodes.EAP_MESSAGE) != null
+        if (request.hasEap()
                 && !RadiusCodec.verifyMessageAuthenticator(data, secretService.getSharedSecret())) {
             log.warn("丢弃 EAP 报文：Message-Authenticator 校验失败 from={}", msg.sender());
             return;

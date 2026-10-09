@@ -68,4 +68,33 @@ public class RadiusPacket {
     public Map<Integer, List<byte[]>> getAttributes() {
         return attributes;
     }
+
+    /**
+     * 判定本报文 EAP-Message 实际所在的属性类型。
+     * 标准为 87，但部分厂商（如华为交换机）会把 EAP 放在 79，并用 87 承载私有端口信息。
+     * 判定依据：属性首个值的 EAP code 字节 ∈ {1..4} 且长度字段 ≥4，以此稳健区分真正的 EAP。
+     * 优先返回标准 87，其次 79，均无有效 EAP 则返回 -1。
+     */
+    public int eapAttributeType() {
+        for (int t : new int[]{RadiusCodes.EAP_MESSAGE, RadiusCodes.EAP_MESSAGE_ALT}) {
+            byte[] v = getAttr(t);
+            if (v == null || v.length < 4) continue;
+            int code = v[0] & 0xFF;
+            int len = ((v[2] & 0xFF) << 8) | (v[3] & 0xFF);
+            if (code >= 1 && code <= 4 && len >= 4) return t;
+        }
+        return -1;
+    }
+
+    public boolean hasEap() {
+        return eapAttributeType() > 0;
+    }
+
+    /** 取 EAP-Message 的全部值（用于分片重组），按请求实际使用的类型取。 */
+    public List<byte[]> eapValues() {
+        int t = eapAttributeType();
+        if (t < 0) return java.util.Collections.emptyList();
+        List<byte[]> list = attributes.get(t);
+        return list == null ? java.util.Collections.emptyList() : list;
+    }
 }

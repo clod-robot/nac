@@ -32,6 +32,6 @@ public class RadiusProperties {
     private int sessionTimeout = 28800;
     /** 授权 VLAN（Tunnel-Private-Group-Id），0=不下发 */
     private int vlanId = 0;
-    /** 802.1X EAP 方法：MD5 / TLS / PEAP */
-    private String eapMethod = "MD5";
+    /** 802.1X EAP 方法：MD5 / TLS / PEAP，默认 TLS（证书认证） */
+    private String eapMethod = "TLS";
 }
