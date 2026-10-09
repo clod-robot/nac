@@ -12,12 +12,15 @@
         <result property="failCount" column="fail_count"/>
         <result property="lastSeen" column="last_seen"/>
         <result property="createTime" column="create_time"/>
+        <result property="online" column="online"/>
     </resultMap>
 
     <select id="list" resultMap="n">
-        SELECT id, nas_ip, nas_name, nas_identifier, last_user, success_count, fail_count, last_seen, create_time
-        FROM sys_nas
-        ORDER BY last_seen DESC
+        SELECT n.id, n.nas_ip, n.nas_name, n.nas_identifier, n.last_user, n.success_count, n.fail_count,
+               n.last_seen, n.create_time,
+               EXISTS(SELECT 1 FROM sys_online_session o WHERE o.nas_ip = n.nas_ip AND o.status = 1) AS online
+        FROM sys_nas n
+        ORDER BY n.last_seen DESC
         LIMIT 200
     </select>
 

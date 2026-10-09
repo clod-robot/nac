@@ -29,19 +29,24 @@
       </template>
       <el-table :data="list" v-loading="loading" empty-text="暂无 NAS 设备发起认证" stripe>
         <el-table-column prop="nasIp" label="NAS IP" width="150" />
+        <el-table-column label="在线" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.online ? 'success' : 'info'" size="small">{{ row.online ? '在线' : '离线' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="名称" min-width="150">
           <template #default="{ row }">
             <span>{{ row.nasName || ('NAS-' + row.nasIp) }}</span>
             <el-button link type="primary" size="small" style="margin-left:8px" @click="openRename(row)">改名</el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="nasIdentifier" label="NAS-Identifier" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="nasIdentifier" label="NAS标识" min-width="140" show-overflow-tooltip />
         <el-table-column prop="lastUser" label="最近认证账号" width="140" />
-        <el-table-column prop="successCount" label="成功" width="90" align="center">
-          <template #default="{ row }"><el-tag type="success" size="small">{{ row.successCount || 0 }}</el-tag></template>
-        </el-table-column>
-        <el-table-column prop="failCount" label="失败" width="90" align="center">
-          <template #default="{ row }"><el-tag type="danger" size="small">{{ row.failCount || 0 }}</el-tag></template>
+        <el-table-column label="统计" width="170" align="center">
+          <template #default="{ row }">
+            <el-tag type="success" size="small">成功 {{ row.successCount || 0 }}</el-tag>
+            <el-tag type="danger" size="small" style="margin-left:4px">失败 {{ row.failCount || 0 }}</el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="最后认证时间" min-width="170">
         <template #default="{ row }">{{ fmt(row.lastSeen) }}</template>

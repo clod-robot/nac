@@ -15,4 +15,6 @@ public class NasDevice {
     private Long failCount;
     private Date lastSeen;
     private Date createTime;
+    /** 是否在线：当前存在 status=1 的在线会话。SQL 计算，非持久化字段。 */
+    private Boolean online;
 }
