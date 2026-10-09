@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     dept          VARCHAR(64)           DEFAULT NULL COMMENT '归属部门',
     status        TINYINT      NOT NULL DEFAULT 1 COMMENT '状态 1启用 0禁用',
     terminal_limit INT         NOT NULL DEFAULT 5 COMMENT '终端数上限（每账号允许接入终端数）',
+    auth_method   VARCHAR(16)  NOT NULL DEFAULT 'eap-tls' COMMENT '认证方式：portal / eap-tls',
     create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

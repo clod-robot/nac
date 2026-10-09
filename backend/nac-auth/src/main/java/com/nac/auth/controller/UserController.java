@@ -48,6 +48,8 @@ public class UserController {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String OP_TOPIC = "nac-op-log";
     private static final Pattern PHONE_RE = Pattern.compile("^\\d{6,15}$");
+    /** 认证方式白名单：仅允许 portal / eap-tls */
+    private static final java.util.Set<String> ALLOWED_AUTH_METHODS = new java.util.HashSet<>(java.util.Arrays.asList("portal", "eap-tls"));
 
     @Value("${nac.crypto.phone-password:NcePhone@2026}")
     private String blindSecret;
@@ -102,6 +104,7 @@ public class UserController {
         private String phone; // 联系电话/手机号
         private String roleCode;
         private Integer terminalLimit;
+        private String authMethod; // 认证方式：portal / eap-tls
     }
 
     @PostMapping
@@ -146,6 +149,7 @@ public class UserController {
         u.setRoleCode((req.getRoleCode() == null || req.getRoleCode().isBlank()) ? "user" : req.getRoleCode());
         u.setStatus(1);
         u.setTerminalLimit(req.getTerminalLimit() == null ? 5 : req.getTerminalLimit());
+        u.setAuthMethod(normalizeAuthMethod(req.getAuthMethod()));
         userMapper.insert(u);
     }
 
@@ -153,8 +157,8 @@ public class UserController {
     @GetMapping("/template")
     @RequireRole
     public void template(HttpServletResponse resp) throws IOException {
-        String csv = "账号,密码,姓名,部门,联系电话,角色,终端数量\n"
-                + "zhangsan,,张三,研发部,13800138000,user,5\n";
+        String csv = "账号,密码,姓名,部门,联系电话,角色,终端数量,认证方式\n"
+                + "zhangsan,,张三,研发部,13800138000,user,5,eap-tls\n";
         byte[] bytes = ("﻿" + csv).getBytes(StandardCharsets.UTF_8); // BOM 防 Excel 中文乱码
         resp.setContentType("text/csv; charset=utf-8");
         resp.setHeader("Content-Disposition", "attachment; filename=\"user-import-template.csv\"");
@@ -207,6 +211,7 @@ public class UserController {
                 try { req.setTerminalLimit(Integer.parseInt(limit.trim())); }
                 catch (NumberFormatException ignored) { req.setTerminalLimit(5); }
             }
+            req.setAuthMethod(val(c, header, "认证方式", "认证"));
             try {
                 doCreate(req);
                 success++;
@@ -323,6 +328,28 @@ public class UserController {
     public Result<Void> dept(@RequestBody DeptReq req) {
         userMapper.updateDept(req.getId(), req.getDept());
         return Result.success();
+    }
+
+    @Data
+    public static class AuthMethodReq {
+        private Long id;
+        private String authMethod;
+    }
+
+    /** 修改认证方式：仅允许 portal / eap-tls，白名单校验防注入非法值 */
+    @PutMapping("/auth-method")
+    @RequireRole
+    @OperationLog("修改账号认证方式")
+    public Result<Void> authMethod(@RequestBody AuthMethodReq req) {
+        userMapper.updateAuthMethod(req.getId(), normalizeAuthMethod(req.getAuthMethod()));
+        return Result.success();
+    }
+
+    /** 认证方式归一化：空/非法一律回退 eap-tls，白名单校验 */
+    private String normalizeAuthMethod(String m) {
+        if (m == null) return "eap-tls";
+        String v = m.trim().toLowerCase();
+        return ALLOWED_AUTH_METHODS.contains(v) ? v : "eap-tls";
     }
 
     @Data

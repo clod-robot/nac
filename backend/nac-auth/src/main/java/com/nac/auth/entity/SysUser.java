@@ -20,6 +20,7 @@ public class SysUser {
     private String dept; // 归属部门
     private Integer status;
     private Integer terminalLimit; // 终端数上限（每账号允许接入的终端数量）
+    private String authMethod; // 认证方式：portal / eap-tls
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private String phoneMasked; // 仅展示用（脱敏手机号），非持久化字段

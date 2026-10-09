@@ -34,6 +34,8 @@ public interface SysUserMapper {
 
     int updateDept(@Param("id") Long id, @Param("dept") String dept);
 
+    int updateAuthMethod(@Param("id") Long id, @Param("authMethod") String authMethod);
+
     /** 更新归属部门与使用人(姓名) */
     int updateProfile(@Param("id") Long id, @Param("dept") String dept, @Param("realName") String realName);
 

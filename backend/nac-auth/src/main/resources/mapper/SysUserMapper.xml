@@ -14,35 +14,36 @@
         <result property="dept" column="dept"/>
         <result property="status" column="status"/>
         <result property="terminalLimit" column="terminal_limit"/>
+        <result property="authMethod" column="auth_method"/>
         <result property="createTime" column="create_time"/>
         <result property="updateTime" column="update_time"/>
     </resultMap>
 
     <!-- 显式列名，禁止 SELECT *；参数全部 #{} 预编译 -->
     <select id="selectByUsername" resultMap="userMap">
-        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, create_time, update_time
+        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, auth_method, create_time, update_time
         FROM sys_user
         WHERE username = #{username}
         LIMIT 1
     </select>
 
     <select id="selectById" resultMap="userMap">
-        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, create_time, update_time
+        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, auth_method, create_time, update_time
         FROM sys_user
         WHERE id = #{id}
         LIMIT 1
     </select>
 
     <select id="selectByPhoneBlind" resultMap="userMap">
-        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, create_time, update_time
+        SELECT id, username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, auth_method, create_time, update_time
         FROM sys_user
         WHERE phone_blind = #{phoneBlind}
         LIMIT 1
     </select>
 
     <insert id="insert" parameterType="com.nac.auth.entity.SysUser" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO sys_user (username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit)
-        VALUES (#{username}, #{passwordHash}, #{realName}, #{phoneCipher}, #{phoneBlind}, #{roleCode}, #{dept}, #{status}, COALESCE(#{terminalLimit}, 5))
+        INSERT INTO sys_user (username, password_hash, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, auth_method)
+        VALUES (#{username}, #{passwordHash}, #{realName}, #{phoneCipher}, #{phoneBlind}, #{roleCode}, #{dept}, #{status}, COALESCE(#{terminalLimit}, 5), COALESCE(#{authMethod}, 'eap-tls'))
     </insert>
 
     <update id="updatePassword">
@@ -59,7 +60,7 @@
 
     <!-- 账号管理：列表不含密码哈希 -->
     <select id="selectPage" resultMap="userMap">
-        SELECT id, username, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, create_time, update_time
+        SELECT id, username, real_name, phone_cipher, phone_blind, role_code, dept, status, terminal_limit, auth_method, create_time, update_time
         FROM sys_user
         <where>
             <if test="keyword != null and keyword != ''">
@@ -97,6 +98,10 @@
 
     <update id="updateDept">
         UPDATE sys_user SET dept = #{dept} WHERE id = #{id}
+    </update>
+
+    <update id="updateAuthMethod">
+        UPDATE sys_user SET auth_method = #{authMethod} WHERE id = #{id}
     </update>
 
     <update id="updateProfile">

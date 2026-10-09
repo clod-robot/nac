@@ -38,6 +38,14 @@
           <el-tag :type="row.roleCode === 'admin' ? 'danger' : 'info'">{{ row.roleCode === 'admin' ? '管理员' : '普通用户' }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="认证方式" width="120">
+        <template #default="{ row }">
+          <el-select v-model="row.authMethod" size="small" style="width:100%" @change="saveAuthMethod(row)">
+            <el-option label="Portal 认证" value="portal" />
+            <el-option label="EAP-TLS 认证" value="eap-tls" />
+          </el-select>
+        </template>
+      </el-table-column>
       <el-table-column label="终端数量" width="150">
         <template #default="{ row }">
           <el-input-number v-model="row.terminalLimit" :min="0" :max="9999" size="small" controls-position="right" @change="saveLimit(row)" />
@@ -80,6 +88,12 @@
           <el-select v-model="form.roleCode" style="width:100%">
             <el-option label="普通用户" value="user" />
             <el-option label="管理员" value="admin" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="认证方式">
+          <el-select v-model="form.authMethod" style="width:100%">
+            <el-option label="Portal 认证" value="portal" />
+            <el-option label="EAP-TLS 认证" value="eap-tls" />
           </el-select>
         </el-form-item>
         <el-form-item label="终端数量"><el-input-number v-model="form.terminalLimit" :min="0" :max="9999" /></el-form-item>
@@ -141,7 +155,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userUpdateProfile, userResetPassword, userDelete, userDownloadTemplate, userImport } from '../api/auth'
+import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userUpdateAuthMethod, userUpdateProfile, userResetPassword, userDelete, userDownloadTemplate, userImport } from '../api/auth'
 import { fmtTime } from '../utils/format'
 const fmt = fmtTime
 import { useBreakpoints } from '../composables/useBreakpoints'
@@ -173,9 +187,9 @@ function onSearch() { page.value = 1; load() }
 
 const createVisible = ref(false)
 const saving = ref(false)
-const form = ref({ username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5 })
+const form = ref({ username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5, authMethod: 'eap-tls' })
 function openCreate() {
-  form.value = { username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5 }
+  form.value = { username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5, authMethod: 'eap-tls' }
   createVisible.value = true
 }
 async function onCreate() {
@@ -221,6 +235,12 @@ async function saveDept(row) {
   try {
     await userUpdateDept({ id: row.id, dept: row.dept || null })
     ElMessage.success('部门已更新')
+  } catch (e) { load() }
+}
+async function saveAuthMethod(row) {
+  try {
+    await userUpdateAuthMethod({ id: row.id, authMethod: row.authMethod || 'eap-tls' })
+    ElMessage.success('认证方式已更新')
   } catch (e) { load() }
 }
 
