@@ -19,9 +19,13 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.multipart.MultipartFile;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -104,6 +108,12 @@ public class UserController {
     @RequireRole
     @OperationLog("新增账号")
     public Result<Void> create(@RequestBody CreateReq req) {
+        doCreate(req);
+        return Result.success();
+    }
+
+    /** 单条创建的核心逻辑（单条新增与批量导入共用），校验失败抛 BusinessException */
+    private void doCreate(CreateReq req) {
         if (req.getUsername() == null || req.getUsername().trim().isEmpty()) {
             throw new BusinessException(400, "账号不能为空");
         }
@@ -137,7 +147,127 @@ public class UserController {
         u.setStatus(1);
         u.setTerminalLimit(req.getTerminalLimit() == null ? 5 : req.getTerminalLimit());
         userMapper.insert(u);
-        return Result.success();
+    }
+
+    /** 下载批量导入模板（CSV，带 UTF-8 BOM，Excel 可直接打开） */
+    @GetMapping("/template")
+    @RequireRole
+    public void template(HttpServletResponse resp) throws IOException {
+        String csv = "账号,密码,姓名,部门,联系电话,角色,终端数量\n"
+                + "zhangsan,,张三,研发部,13800138000,user,5\n";
+        byte[] bytes = ("﻿" + csv).getBytes(StandardCharsets.UTF_8); // BOM 防 Excel 中文乱码
+        resp.setContentType("text/csv; charset=utf-8");
+        resp.setHeader("Content-Disposition", "attachment; filename=\"user-import-template.csv\"");
+        resp.setContentLength(bytes.length);
+        resp.getOutputStream().write(bytes);
+        resp.getOutputStream().flush();
+    }
+
+    /** 批量导入：解析 CSV → 逐行复用 doCreate，返回成功/失败计数与逐行错误 */
+    @PostMapping("/import")
+    @RequireRole
+    @OperationLog("批量导入账号")
+    public Result<Map<String, Object>> importCsv(@RequestParam("file") MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(400, "文件为空");
+        }
+        String text = new String(file.getBytes(), StandardCharsets.UTF_8);
+        if (text.startsWith("﻿")) text = text.substring(1); // 去 BOM
+        String[] lines = text.split("\\r?\\n");
+
+        Map<String, Integer> header = null;
+        List<String[]> rows = new ArrayList<>();
+        for (String line : lines) {
+            if (line.trim().isEmpty()) continue;
+            String[] cells = parseCsvLine(line);
+            if (header == null) { header = indexHeader(cells); continue; }
+            rows.add(cells);
+        }
+        if (header == null) {
+            throw new BusinessException(400, "模板无表头，请先下载模板");
+        }
+        if (rows.size() > 1000) {
+            throw new BusinessException(400, "单次最多导入 1000 行");
+        }
+
+        int success = 0, fail = 0;
+        List<Map<String, Object>> errors = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            String[] c = rows.get(i);
+            CreateReq req = new CreateReq();
+            req.setUsername(val(c, header, "账号", "用户名"));
+            req.setPassword(val(c, header, "密码"));
+            req.setRealName(val(c, header, "姓名", "归属人", "使用人"));
+            req.setDept(val(c, header, "部门"));
+            req.setPhone(val(c, header, "联系电话", "手机", "电话"));
+            String role = val(c, header, "角色");
+            req.setRoleCode((role == null || role.isBlank()) ? "user" : role.trim());
+            String limit = val(c, header, "终端数量", "终端上限");
+            if (limit != null && !limit.isBlank()) {
+                try { req.setTerminalLimit(Integer.parseInt(limit.trim())); }
+                catch (NumberFormatException ignored) { req.setTerminalLimit(5); }
+            }
+            try {
+                doCreate(req);
+                success++;
+            } catch (BusinessException e) {
+                fail++;
+                Map<String, Object> er = new LinkedHashMap<>();
+                er.put("row", i + 2);
+                er.put("username", req.getUsername());
+                er.put("message", e.getMessage());
+                errors.add(er);
+            }
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("total", rows.size());
+        data.put("success", success);
+        data.put("fail", fail);
+        data.put("errors", errors);
+        return Result.success(data);
+    }
+
+    private String val(String[] cells, Map<String, Integer> header, String... names) {
+        for (String n : names) {
+            Integer idx = header.get(n);
+            if (idx != null && idx < cells.length) {
+                String v = cells[idx];
+                if (v != null && !v.trim().isEmpty()) return v.trim();
+            }
+        }
+        return null;
+    }
+
+    /** 表头名 → 列下标（兼容常见别名） */
+    private Map<String, Integer> indexHeader(String[] cells) {
+        Map<String, Integer> m = new HashMap<>();
+        for (int i = 0; i < cells.length; i++) {
+            String h = cells[i] == null ? "" : cells[i].trim();
+            if (!h.isEmpty()) m.put(h, i);
+        }
+        return m;
+    }
+
+    /** 极简 CSV 行解析：支持双引号包裹与转义("") */
+    private String[] parseCsvLine(String line) {
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inQuote = false;
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (inQuote) {
+                if (ch == '"') {
+                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') { cur.append('"'); i++; }
+                    else inQuote = false;
+                } else cur.append(ch);
+            } else {
+                if (ch == '"') inQuote = true;
+                else if (ch == ',') { out.add(cur.toString()); cur.setLength(0); }
+                else cur.append(ch);
+            }
+        }
+        out.add(cur.toString());
+        return out.toArray(new String[0]);
     }
 
     @Data

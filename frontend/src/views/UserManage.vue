@@ -12,6 +12,9 @@
             <el-option v-for="d in deptOptions" :key="d" :label="d" :value="d" />
           </el-select>
           <el-button type="primary" size="small" @click="openCreate">新增账号</el-button>
+          <el-button size="small" @click="downloadTemplate">下载模板</el-button>
+          <el-button size="small" type="success" :loading="importing" @click="fileInput?.click()">批量导入</el-button>
+          <input ref="fileInput" type="file" accept=".csv" style="display:none" @change="onImportFile" />
         </div>
       </div>
     </template>
@@ -120,13 +123,25 @@
         <el-button type="primary" :loading="saving" @click="onReset">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量导入结果 -->
+    <el-dialog v-model="importResultVisible" title="批量导入结果" :width="isMobile ? '92%' : '440px'">
+      <el-alert type="success" :closable="false" show-icon style="margin-bottom:10px"
+        :title="`共 ${importResult.total} 行，成功 ${importResult.success}，失败 ${importResult.fail}`" />
+      <div v-if="importResult.errors && importResult.errors.length" style="max-height:260px;overflow:auto">
+        <div v-for="e in importResult.errors" :key="e.row" style="font-size:12px;color:#f56c6c;line-height:1.8">
+          第 {{ e.row }} 行（{{ e.username || '空' }}）：{{ e.message }}
+        </div>
+      </div>
+      <template #footer><el-button type="primary" @click="importResultVisible = false">知道了</el-button></template>
+    </el-dialog>
   </el-card>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userUpdateProfile, userResetPassword, userDelete } from '../api/auth'
+import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userUpdateProfile, userResetPassword, userDelete, userDownloadTemplate, userImport } from '../api/auth'
 import { fmtTime } from '../utils/format'
 const fmt = fmtTime
 import { useBreakpoints } from '../composables/useBreakpoints'
@@ -233,6 +248,37 @@ async function onDelete(row) {
 }
 
 onMounted(load)
+
+// ===== 批量导入 =====
+const fileInput = ref(null)
+const importing = ref(false)
+const importResultVisible = ref(false)
+const importResult = ref({ total: 0, success: 0, fail: 0, errors: [] })
+
+async function downloadTemplate() {
+  try {
+    const resp = await userDownloadTemplate()
+    const blob = new Blob([resp.data], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = '用户导入模板.csv'; a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { ElMessage.error('模板下载失败') }
+}
+async function onImportFile(e) {
+  const f = e.target.files[0]
+  e.target.value = ''
+  if (!f) return
+  importing.value = true
+  try {
+    const fd = new FormData(); fd.append('file', f)
+    const r = await userImport(fd)
+    importResult.value = r.data || { total: 0, success: 0, fail: 0, errors: [] }
+    importResultVisible.value = true
+    ElMessage.success(`导入完成：成功 ${importResult.value.success}，失败 ${importResult.value.fail}`)
+    load()
+  } finally { importing.value = false }
+}
 </script>
 
 <style scoped>

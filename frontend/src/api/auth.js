@@ -41,6 +41,11 @@ export const userUpdateDept = (data) => request.put('/api/auth/admin/users/dept'
 export const userUpdateProfile = (data) => request.put('/api/auth/admin/users/profile', data)
 export const userResetPassword = (data) => request.put('/api/auth/admin/users/password', data)
 export const userDelete = (id) => request.delete(`/api/auth/admin/users/${id}`)
+// 批量导入：下载模板(CSV，带BOM) / 上传导入
+export const userDownloadTemplate = () => request.get('/api/auth/admin/users/template', { responseType: 'blob' })
+export const userImport = (formData) => request.post('/api/auth/admin/users/import', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000
+})
 
 // 仪表盘服务器监控
 export const getMonitorSnapshot = () => request.get('/api/auth/monitor/snapshot')

@@ -17,6 +17,8 @@ request.interceptors.request.use((cfg) => {
 // 响应拦截：统一业务码处理；401 清登录态
 request.interceptors.response.use(
   (resp) => {
+    // 文件下载（blob）直接返回原始响应，不走业务码解析
+    if (resp.config && resp.config.responseType === 'blob') return resp
     const d = resp.data
     if (d && d.code === 200) return d
     if (d && d.code === 401) {
