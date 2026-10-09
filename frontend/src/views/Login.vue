@@ -42,13 +42,19 @@
         </el-tab-pane>
       </el-tabs>
       <div class="tip">默认管理员 admin / admin123（首次登录后请修改）</div>
+      <div class="dl-row">
+        <el-link type="primary" :underline="false" href="/downloads/8021x-client.zip" download>
+          <el-icon style="vertical-align:-2px;margin-right:4px"><Download /></el-icon>下载 802.1X 客户端
+        </el-link>
+        <span class="dl-tip">（含与服务器一致的 CA/客户端证书，p12 口令 123456）</span>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, Download } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCaptcha, login, sendSms, smsLogin } from '../api/auth'
@@ -110,4 +116,6 @@ onMounted(loadCaptcha)
 .cap-row .el-input { flex: 1; min-width: 0; }
 .cap-img { height: 40px; cursor: pointer; border: 1px solid #dcdfe6; border-radius: 4px; flex-shrink: 0; }
 .tip { margin-top: 12px; color: #909399; font-size: 12px; text-align: center; }
+.dl-row { margin-top: 10px; text-align: center; font-size: 12px; }
+.dl-tip { color: #909399; margin-left: 6px; }
 </style>
