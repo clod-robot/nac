@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.log.mapper.ConfigMapper">
+
+    <resultMap id="m" type="com.nac.common.entity.SysConfig">
+        <id property="configKey" column="config_key"/>
+        <result property="configValue" column="config_value"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <select id="selectByKey" resultMap="m">
+        SELECT config_key, config_value, update_time FROM sys_config WHERE config_key = #{key}
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO sys_config (config_key, config_value)
+        VALUES (#{key}, #{value})
+        ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
+    </insert>
+
+</mapper>

@@ -1,11 +1,14 @@
 package com.nac.auth.controller;
 
 import com.nac.auth.entity.NasDevice;
+import com.nac.auth.mapper.ConfigMapper;
 import com.nac.auth.mapper.NasMapper;
 import com.nac.common.constant.RedisKeyConstants;
+import com.nac.common.entity.SysConfig;
 import com.nac.common.exception.BusinessException;
 import com.nac.common.log.OperationLog;
 import com.nac.common.ratelimit.RateLimit;
+import com.nac.common.redis.ConfigCache;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.result.Result;
 import com.nac.common.result.ResultCode;
@@ -27,25 +30,30 @@ public class NasController {
 
     private final NasMapper nasMapper;
     private final RedisUtil redisUtil;
+    private final ConfigMapper configMapper;
 
-    public NasController(NasMapper nasMapper, RedisUtil redisUtil) {
+    public NasController(NasMapper nasMapper, RedisUtil redisUtil, ConfigMapper configMapper) {
         this.nasMapper = nasMapper;
         this.redisUtil = redisUtil;
+        this.configMapper = configMapper;
     }
 
-    /** 查询当前共享密钥（未自定义时返回空串 + customized=false，表示使用服务端默认配置） */
+    /** 查询当前共享密钥（DB 为真值，Redis 缓存；未自定义时返回空串 + customized=false） */
     @GetMapping("/secret")
     @RequireRole
     @RateLimit(limit = 60, window = 60)
     public Result<Map<String, Object>> secret() {
-        String s = redisUtil.get(RedisKeyConstants.RADIUS_SHARED_SECRET);
+        String k = RedisKeyConstants.RADIUS_SHARED_SECRET;
+        String s = ConfigCache.get(redisUtil, k,
+                () -> { SysConfig c = configMapper.selectByKey(k); return c == null ? null : c.getConfigValue(); },
+                null);
         Map<String, Object> m = new HashMap<>();
         m.put("secret", s == null ? "" : s);
         m.put("customized", s != null);
         return Result.success(m);
     }
 
-    /** 修改共享密钥：4-64 位，写入 Redis 持久化，nac-radius 即时生效 */
+    /** 修改共享密钥：4-64 位，先落库再刷新缓存（持久化 + 一致性），nac-radius 即时生效 */
     @PutMapping("/secret")
     @RequireRole
     @RateLimit(limit = 20, window = 60)
@@ -58,7 +66,9 @@ public class NasController {
         if (s.length() < 4 || s.length() > 64) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "密钥长度需 4-64 位");
         }
-        redisUtil.set(RedisKeyConstants.RADIUS_SHARED_SECRET, s);
+        String k = RedisKeyConstants.RADIUS_SHARED_SECRET;
+        final String val = s;
+        ConfigCache.put(redisUtil, k, val, () -> configMapper.upsert(k, val));
         return Result.success();
     }
 

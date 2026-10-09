@@ -1,8 +1,10 @@
 package com.nac.auth.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nac.auth.mapper.ConfigMapper;
 import com.nac.common.constant.RedisKeyConstants;
 import com.nac.common.exception.BusinessException;
+import com.nac.common.redis.ConfigCache;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.result.ResultCode;
 import com.nac.common.syslog.SyslogConfig;
@@ -11,27 +13,30 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * syslog 外发配置存取（Redis 持久化，热生效）。
+ * syslog 外发配置存取（cache-aside）：DB 为真值，Redis 缓存，热生效。
  */
 @Slf4j
 @Service
 public class SyslogConfigService {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String K = RedisKeyConstants.SYSLOG_CONFIG;
 
     private final RedisUtil redisUtil;
     private final SyslogForwarder forwarder;
+    private final ConfigMapper configMapper;
 
-    public SyslogConfigService(RedisUtil redisUtil, SyslogForwarder forwarder) {
+    public SyslogConfigService(RedisUtil redisUtil, SyslogForwarder forwarder, ConfigMapper configMapper) {
         this.redisUtil = redisUtil;
         this.forwarder = forwarder;
+        this.configMapper = configMapper;
     }
 
     public SyslogConfig get() {
         return forwarder.getConfig();
     }
 
-    /** 保存配置并校验；保存后即时生效。 */
+    /** 保存配置并校验：先落库再刷缓存，保存后即时生效。 */
     public void save(SyslogConfig cfg) {
         if (cfg == null) throw new BusinessException(ResultCode.BAD_REQUEST, "配置不能为空");
         String proto = cfg.getProtocol() == null ? "UDP" : cfg.getProtocol().trim().toUpperCase();
@@ -50,7 +55,8 @@ public class SyslogConfigService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "启用外发时必须填写服务器地址");
         }
         try {
-            redisUtil.set(RedisKeyConstants.SYSLOG_CONFIG, MAPPER.writeValueAsString(cfg));
+            String json = MAPPER.writeValueAsString(cfg);
+            ConfigCache.put(redisUtil, K, json, () -> configMapper.upsert(K, json));
         } catch (Exception e) {
             throw new BusinessException(ResultCode.SERVER_ERROR, "保存配置失败");
         }

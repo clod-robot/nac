@@ -2,8 +2,11 @@ package com.nac.auth.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.nac.auth.dto.SmsConfig;
+import com.nac.auth.mapper.ConfigMapper;
 import com.nac.common.constant.RedisKeyConstants;
+import com.nac.common.entity.SysConfig;
 import com.nac.common.exception.BusinessException;
+import com.nac.common.redis.ConfigCache;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
@@ -13,16 +16,18 @@ import org.springframework.stereotype.Service;
 import java.util.Set;
 
 /**
- * 短信网关配置存取：存 Redis（持久化），读取时与 application.yml 默认值合并（界面未填则用环境变量兜底）。
- * 修改即时生效（SmsService / 各网关每次发送前调用 get()）。
+ * 短信网关配置存取（cache-aside）：DB 为真值，Redis 缓存；读取时与 application.yml 默认值合并。
+ * 修改即时生效（先落库再刷缓存，SmsService 每次发送前调用 get()）。
  */
 @Slf4j
 @Service
 public class SmsConfigService {
 
     private static final Set<String> PROVIDERS = Set.of("mock", "aliyun", "tencent", "huawei", "custom");
+    private static final String K = RedisKeyConstants.SMS_CONFIG;
 
     private final RedisUtil redisUtil;
+    private final ConfigMapper configMapper;
 
     @Value("${nac.sms.provider:mock}") private String defProvider;
     @Value("${nac.sms.aliyun.access-key-id:}") private String defAliAk;
@@ -41,14 +46,17 @@ public class SmsConfigService {
     @Value("${nac.sms.huawei.template-id:}") private String defHwTpl;
     @Value("${nac.sms.huawei.url:https://smsapi.cn-north-4.myhuaweicloud.com:443/sms/batchSendSms/v1}") private String defHwUrl;
 
-    public SmsConfigService(RedisUtil redisUtil) {
+    public SmsConfigService(RedisUtil redisUtil, ConfigMapper configMapper) {
         this.redisUtil = redisUtil;
+        this.configMapper = configMapper;
     }
 
-    /** 读取生效配置（Redis 覆盖，空值回退 env 默认） */
+    /** 读取生效配置（缓存优先，未命中查库回填，空值回退 env 默认） */
     public SmsConfig get() {
         SmsConfig c = null;
-        String json = redisUtil.get(RedisKeyConstants.SMS_CONFIG);
+        String json = ConfigCache.get(redisUtil, K,
+                () -> { SysConfig sc = configMapper.selectByKey(K); return sc == null ? null : sc.getConfigValue(); },
+                null);
         if (json != null && !json.isBlank()) {
             try { c = JSON.parseObject(json, SmsConfig.class); } catch (Exception e) { log.warn("短信配置解析失败: {}", e.getMessage()); }
         }
@@ -91,7 +99,8 @@ public class SmsConfigService {
         if (cfg.getTencent() == null) cfg.setTencent(new SmsConfig.Tencent());
         if (cfg.getHuawei() == null) cfg.setHuawei(new SmsConfig.Huawei());
         if (cfg.getCustom() == null) cfg.setCustom(new SmsConfig.Custom());
-        redisUtil.set(RedisKeyConstants.SMS_CONFIG, JSON.toJSONString(cfg));
+        String json = JSON.toJSONString(cfg);
+        ConfigCache.put(redisUtil, K, json, () -> configMapper.upsert(K, json));
     }
 
     private static String nz(String v, String def) {
