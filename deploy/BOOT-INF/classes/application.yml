@@ -1,0 +1,112 @@
+server:
+  port: 9001
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 20
+    accept-count: 200
+
+spring:
+  application:
+    name: nac-auth
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+  # ================= MySQL / HikariCP =================
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/nac_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: root
+    password: MAO5201314sm
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      pool-name: NacAuthHikariPool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1200000
+  # ================= Redis（认证账号缓存 / 分布式在线会话） =================
+  # Lettuce 默认单连接多路复用：各命令独立 Future 并行收发，短命令场景无需连接池
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: MAO5201314sm
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      shutdown-timeout: 200ms
+  # ================= Kafka（高并发认证事件削峰） =================
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      acks: 1
+      retries: 3
+      batch-size: 16384
+      buffer-memory: 33554432
+      linger-ms: 20          # 认证高峰时小批量聚合发送
+      compression-type: lz4
+      properties:
+        # broker 故障/抖动时 send() 最多阻塞 100ms 即抛错（默认 60s 会拖死认证线程）
+        max.block.ms: 100
+        request.timeout.ms: 2000
+        delivery.timeout.ms: 4000
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+# ================= MyBatis =================
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.nac.auth.store
+  configuration:
+    map-underscore-to-camel-case: true
+
+# RADIUS Server 配置
+radius:
+  auth-port: 1812          # 认证端口（UDP）
+  acct-port: 1813          # 计费端口（UDP）
+  shared-secret: testing123  # RADIUS 共享密钥
+  server-host: localhost    # RADIUS 服务器地址（EAPOL Authenticator 使用）
+  # ---- 性能调优 ----
+  biz-threads: 0            # 认证业务线程数，0=2*CPU核数（4核机=8）
+  udp-rcvbuf: 4194304       # UDP 接收缓冲 4MB（需 sysctl net.core.rmem_max>=4194304 才会全额生效）
+  udp-sndbuf: 4194304       # UDP 发送缓冲 4MB
+  user-cache-ttl-seconds: 30   # 用户信息进程内缓存 TTL（秒），稳态认证零 Redis RTT
+  user-cache-max-size: 10000   # 本地用户缓存容量上限
+  session-async: true       # 在线会话异步写 Redis，不阻塞 Access-Accept
+  session-queue-capacity: 20000  # 会话写队列容量，满时调用线程同步兜底（不丢会话）
+  # ---- 认证方式协商 / 授权 ----
+  eap-default-method: PEAP  # 初始提议方式（PEAP / EAP-MSCHAPv2 / EAP-MD5），客户端可 NAK 协商
+  session-timeout-default: 3600  # Access-Accept 默认 Session-Timeout（秒）
+  # ---- PEAP 服务端证书（CA 签发，SAN 含 192.168.80.36；口令支持环境变量 PEAP_KEYSTORE_PASSWORD） ----
+  peap:
+    keystore: /home/mao/nac/certs/peap.jks  # 外置优先，缺失自动回退 classpath:peap.jks
+    keystore-type: JKS
+    keystore-password: ${PEAP_KEYSTORE_PASSWORD:NceRadius@2026}
+    protocols: TLSv1.2  # 等保：禁用 TLS1.0/1.1
+  # ---- RFC3576 强制下线（向交换机 UDP 3799 发 Disconnect-Request） ----
+  coa-enabled: true
+  coa-port: 3799
+  coa-timeout-ms: 2000
+
+# EAPOL Authenticator 配置（802.1x 桥接器）
+eapol:
+  enabled: true             # 是否启用
+  device: '\Device\NPF_{392F8D41-DFD8-4B3D-AAAB-486B49F49688}'  # Realtek 物理网卡（单引号保留反斜杠字面值）
+  nas-identifier: nac-authenticator
+  nas-ip: 127.0.0.1
+
+# ================= 手机号加密（等保：个人敏感信息加密留存） =================
+# 短信认证手机号 AES-256-GCM 加密留存与 HMAC 盲索引的口令；生产环境用环境变量覆盖，避免明文入库
+phone:
+  crypto-password: ${PHONE_CRYPTO_PASSWORD:NcePhone@2026}
+
+# ================= Portal MAC 旁路放通（跨厂商通用 MAB） =================
+portal:
+  # Portal 认证成功后是否启用 MAC 旁路放通（Portal 页面配置 mab_enabled 优先于此项）
+  mab-enabled: ${PORTAL_MAB_ENABLED:true}
+
+logging:
+  level:
+    com.nac.auth: INFO

@@ -1,0 +1,279 @@
+{
+  "meta": {
+    "version": 1,
+    "notice": "规则基于公开漏洞情报的版本匹配，结果用于授权环境下的安全评估，不代表漏洞必然可利用"
+  },
+
+  "fingerprints": [
+    { "product": "OpenSSH",        "service": "ssh",       "source": "banner", "regex": "OpenSSH[_ -]?v?([0-9][0-9A-Za-z._-]*)", "versionGroup": 1 },
+    { "product": "Dropbear SSH",   "service": "ssh",       "source": "banner", "regex": "dropbear[_ ]?v?([0-9][0-9A-Za-z.]*)", "versionGroup": 1 },
+    { "product": "Cisco IOS SSH",  "service": "ssh",       "source": "banner", "regex": "(Cisco-[0-9.]+)", "versionGroup": 1 },
+    { "product": "vsftpd",         "service": "ftp",       "source": "banner", "regex": "vsftpd\\.?\\(?v?([0-9.]+)\\)?", "versionGroup": 1 },
+    { "product": "ProFTPD",        "service": "ftp",       "source": "banner", "regex": "ProFTPD\\s+(?:Server\\s+)?([0-9][0-9A-Za-z.]+)", "versionGroup": 1 },
+    { "product": "Pure-FTPd",      "service": "ftp",       "source": "banner", "regex": "Pure-FTPd", "versionGroup": 0 },
+    { "product": "FileZilla Server","service": "ftp",      "source": "banner", "regex": "FileZilla Server\\s+(?:version\\s+)?([0-9.]+)", "versionGroup": 1 },
+    { "product": "Serv-U FTP",     "service": "ftp",       "source": "banner", "regex": "Serv-U FTP Server v?([0-9.]+)", "versionGroup": 1 },
+    { "product": "Microsoft FTP Service", "service": "ftp","source": "banner", "regex": "Microsoft FTP Service", "versionGroup": 0 },
+    { "product": "Postfix",        "service": "smtp",      "source": "banner", "regex": "Postfix(?:\\s+\\(\\))?\\s*\\(?([0-9.]+)?\\)?", "versionGroup": 1 },
+    { "product": "Sendmail",       "service": "smtp",      "source": "banner", "regex": "Sendmail\\s+([0-9.]+)", "versionGroup": 1 },
+    { "product": "Dovecot",        "service": "pop3",      "source": "banner", "regex": "Dovecot ready", "versionGroup": 0 },
+    { "product": "nginx",          "service": "http",      "source": "server", "regex": "nginx/([0-9.]+)", "versionGroup": 1 },
+    { "product": "Apache HTTP Server","service": "http",    "source": "server", "regex": "Apache/([0-9.]+)", "versionGroup": 1 },
+    { "product": "Microsoft IIS",  "service": "http",      "source": "server", "regex": "Microsoft-IIS/([0-9.]+)", "versionGroup": 1 },
+    { "product": "lighttpd",       "service": "http",      "source": "server", "regex": "lighttpd/([0-9.]+)", "versionGroup": 1 },
+    { "product": "Apache Tomcat",  "service": "http",      "source": "any",    "regex": "Apache Tomcat/([0-9.]+)", "versionGroup": 1 },
+    { "product": "Apache Tomcat",  "service": "http",      "source": "server", "regex": "Apache-Coyote", "versionGroup": 0 },
+    { "product": "PHP",            "service": "http",      "source": "poweredby", "regex": "PHP/([0-9.]+)", "versionGroup": 1 },
+    { "product": "Jenkins",        "service": "http",      "source": "any",    "regex": "X-Jenkins:\\s*([0-9.]+)", "versionGroup": 1 },
+    { "product": "Elasticsearch",  "service": "elasticsearch", "source": "body", "regex": "\"cluster_name\"[\\s\\S]{0,300}?\"number\"\\s*:\\s*\"([0-9.]+)\"", "versionGroup": 1 },
+    { "product": "Docker",         "service": "docker",    "source": "body",   "regex": "\"Version\"\\s*:\\s*\"([0-9.]+)\"", "versionGroup": 1 },
+    { "product": "CouchDB",        "service": "couchdb",   "source": "body",   "regex": "\"couchdb\"\\s*:\\s*\"Welcome\"[\\s\\S]{0,200}?\"version\"\\s*:\\s*\"([0-9.]+)\"", "versionGroup": 1 },
+    { "product": "etcd",           "service": "etcd",      "source": "body",   "regex": "\"etcdserver\"\\s*:\\s*\"([0-9.]+)\"", "versionGroup": 1 },
+    { "product": "Kubernetes",     "service": "kubernetes","source": "body",   "regex": "\"gitVersion\"\\s*:\\s*\"v?([0-9.]+)\"", "versionGroup": 1 },
+    { "product": "Redis",          "service": "redis",     "source": "banner", "regex": "Redis\\s+([0-9.]+)", "versionGroup": 1 },
+    { "product": "Memcached",      "service": "memcached", "source": "banner", "regex": "VERSION ([0-9.]+)", "versionGroup": 1 },
+    { "product": "rsync",          "service": "rsync",     "source": "banner", "regex": "@RSYNCD:\\s*([0-9.]+)", "versionGroup": 1 },
+    { "product": "Apache ZooKeeper","service": "zookeeper","source": "banner", "regex": "zookeeper.version=([0-9.]+)", "versionGroup": 1 },
+    { "product": "Hikvision IP Camera","service": "http",  "source": "server", "regex": "App-webs|Hikvision-Webs|HikvisionServer", "versionGroup": 0 },
+    { "product": "Hikvision IP Camera","service": "rtsp",  "source": "banner", "regex": "Hikvision", "versionGroup": 0 },
+    { "product": "Oracle WebLogic Server","service": "http","source": "any",   "regex": "(?:Welcome to|Oracle) WebLogic", "versionGroup": 0 },
+    { "product": "Kibana",         "service": "kibana",    "source": "any",    "regex": "kbn-name|Kibana", "versionGroup": 0 },
+    { "product": "Apache Solr",    "service": "http",      "source": "title",  "regex": "Solr Admin", "versionGroup": 0 },
+    { "product": "Apache Hadoop",  "service": "http",      "source": "any",    "regex": "Hadoop", "versionGroup": 0 },
+    { "product": "Apache ActiveMQ","service": "http",      "source": "title",  "regex": "Apache ActiveMQ", "versionGroup": 0 },
+    { "product": "MariaDB",        "service": "mysql",     "source": "banner", "regex": "([0-9]+\\.[0-9]+\\.[0-9]+)-MariaDB", "versionGroup": 1 },
+    { "product": "MySQL",          "service": "mysql",     "source": "banner", "regex": "^([0-9]+\\.[0-9]+\\.[0-9]+)", "versionGroup": 1 }
+  ],
+
+  "rules": [
+    {
+      "id": "CVE-2016-6210", "product": "OpenSSH", "severity": "medium",
+      "service": "ssh", "source": "banner",
+      "regex": "OpenSSH[_ -]?v?([0-9]+\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "7.0",
+      "title": "OpenSSH 用户名枚举",
+      "description": "7.0 之前版本在处理不存在用户时存在计时差异，可枚举有效用户名用于后续口令攻击。",
+      "solution": "升级 OpenSSH 到 7.0 以上版本。",
+      "reference": "https://www.openssh.com/security.html"
+    },
+    {
+      "id": "CVE-2016-10009", "product": "OpenSSH", "severity": "medium",
+      "service": "ssh", "source": "banner",
+      "regex": "OpenSSH[_ -]?v?([0-9]+\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "7.2",
+      "title": "OpenSSH agent 转发/特权分离系列漏洞",
+      "description": "7.2 之前版本存在 CVE-2016-10009/10011/10012，可导致本地提权或在特定配置下执行代码。",
+      "solution": "升级 OpenSSH 到 7.2 以上版本。",
+      "reference": "https://www.openssh.com/security.html"
+    },
+    {
+      "id": "VS-SSHV1", "product": "OpenSSH/设备SSH", "severity": "high",
+      "service": "ssh", "source": "banner", "regex": "SSH-1\\.99",
+      "op": "any",
+      "title": "SSH 服务支持 SSHv1 协议",
+      "description": "SSH-1.99 标识表示服务端兼容 SSHv1，v1 协议存在已知加密弱点。",
+      "solution": "禁用协议版本 1，仅允许 SSHv2。"
+    },
+    {
+      "id": "VS-DROPBEAR-OLD", "product": "Dropbear SSH", "severity": "medium",
+      "service": "ssh", "source": "banner",
+      "regex": "dropbear[_ ]?v?([0-9]{4}\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "2016.74",
+      "title": "Dropbear 版本过旧",
+      "description": "2016.74 之前的 Dropbear 存在 X11 转发命令注入等历史漏洞，嵌入式/网络设备常见。",
+      "solution": "升级 Dropbear 或升级设备固件。"
+    },
+    {
+      "id": "VS-VSFTPD-234", "product": "vsftpd", "severity": "critical",
+      "service": "ftp", "source": "banner",
+      "regex": "vsftpd\\.?\\(?v?(2\\.3\\.4)\\)?", "versionGroup": 1,
+      "op": "eq", "version": "2.3.4",
+      "title": "vsftpd 2.3.4 后门版本",
+      "description": "2.3.4 曾被植入后门，特定用户名登录后在 6200 端口开放 root shell。",
+      "solution": "立即更换为官方最新版 vsftpd，检查主机是否已被入侵。"
+    },
+    {
+      "id": "VS-PROFTPD-133C", "product": "ProFTPD", "severity": "critical",
+      "service": "ftp", "source": "banner",
+      "regex": "ProFTPD\\s+(1\\.3\\.3c)", "versionGroup": 1,
+      "op": "eq", "version": "1.3.3c",
+      "title": "ProFTPD 1.3.3c 后门版本",
+      "description": "1.3.3c 曾被篡改植入后门，-c 版本可被特殊命令直接获取 root shell。",
+      "solution": "从官方源重新安装受支持版本，排查入侵痕迹。"
+    },
+    {
+      "id": "CVE-2015-3306", "product": "ProFTPD", "severity": "high",
+      "service": "ftp", "source": "banner",
+      "regex": "ProFTPD\\s+(1\\.3\\.5)", "versionGroup": 1,
+      "op": "eq", "version": "1.3.5",
+      "title": "ProFTPD mod_copy 未授权复制(RCE)",
+      "description": "1.3.5 版本 mod_copy 的 SITE CPFR/CPTO 命令无需认证，可向 Web 目录写入文件导致 RCE（1.3.5b 修复，建议人工验证补丁小版本）。",
+      "solution": "升级 ProFTPD 至 1.3.5b/1.3.6 以上，或禁用 mod_copy。"
+    },
+    {
+      "id": "CVE-2021-41773", "product": "Apache HTTP Server", "severity": "critical",
+      "service": "http", "source": "server",
+      "regex": "Apache/(2\\.4\\.49)(?![0-9])", "versionGroup": 1,
+      "op": "eq", "version": "2.4.49",
+      "title": "Apache 路径穿越与文件读取",
+      "description": "2.4.49 版本路径规范化缺陷，可穿越读取受保护文件，CGI 开启时可导致 RCE。",
+      "solution": "立即升级到 2.4.51 或更新版本。",
+      "reference": "https://httpd.apache.org/security/vulnerabilities_24.html"
+    },
+    {
+      "id": "CVE-2021-42013", "product": "Apache HTTP Server", "severity": "critical",
+      "service": "http", "source": "server",
+      "regex": "Apache/(2\\.4\\.50)(?![0-9])", "versionGroup": 1,
+      "op": "eq", "version": "2.4.50",
+      "title": "Apache 路径穿越修复绕过",
+      "description": "对 CVE-2021-41773 的修复不完整，仍可利用绕过手段进行路径穿越与 RCE。",
+      "solution": "立即升级到 2.4.51 或更新版本。",
+      "reference": "https://httpd.apache.org/security/vulnerabilities_24.html"
+    },
+    {
+      "id": "CVE-2022-22720", "product": "Apache HTTP Server", "severity": "medium",
+      "service": "http", "source": "server",
+      "regex": "Apache/(2\\.4\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "2.4.53",
+      "title": "Apache HTTP 请求走私",
+      "description": "2.4.53 之前版本在代理与服务器输入不一致时可能产生请求走私。",
+      "solution": "升级 httpd 到 2.4.53 以上。",
+      "reference": "https://httpd.apache.org/security/vulnerabilities_24.html"
+    },
+    {
+      "id": "CVE-2021-23017", "product": "nginx", "severity": "high",
+      "service": "http", "source": "server",
+      "regex": "nginx/([0-9]+\\.[0-9]+\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "1.20.1",
+      "title": "nginx resolver 堆破坏",
+      "description": "resolver 指令处理 DNS 响应时存在一字节越界，可造成工作进程崩溃或潜在代码执行（使用 resolver 配置时受影响）。",
+      "solution": "升级 nginx 到 1.20.1+/1.21.0+。",
+      "reference": "https://nginx.org/en/security_advisories.html"
+    },
+    {
+      "id": "CVE-2019-9511", "product": "nginx", "severity": "medium",
+      "service": "http", "source": "server",
+      "regex": "nginx/([0-9]+\\.[0-9]+\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "1.16.1",
+      "title": "HTTP/2 系列拒绝服务漏洞",
+      "description": "多个 HTTP/2 实现（含 1.16.1/1.17.3 之前的 nginx）存在数据消耗/资源管理类 DoS。",
+      "solution": "升级 nginx 到 1.16.1+/1.17.3+。",
+      "reference": "https://nginx.org/en/security_advisories.html"
+    },
+    {
+      "id": "CVE-2017-7269", "product": "Microsoft IIS", "severity": "critical",
+      "service": "http", "source": "server",
+      "regex": "Microsoft-IIS/6\\.0", "op": "any",
+      "title": "IIS 6.0 WebDAV 缓冲区溢出",
+      "description": "IIS 6.0 WebDAV 服务 ScStoragePathFromUrl 存在缓冲区溢出，可被远程利用执行代码。",
+      "solution": "停止使用 IIS 6.0/Windows 2003；如必须运行则禁用 WebDAV 并通过访问控制隔离。"
+    },
+    {
+      "id": "VS-IIS-EOL", "product": "Microsoft IIS", "severity": "medium",
+      "service": "http", "source": "server",
+      "regex": "Microsoft-IIS/7\\.[05](?:[^0-9]|$)", "op": "any",
+      "title": "IIS 7.0/7.5 对应系统已停止支持",
+      "description": "IIS 7.x 运行于 Windows 2008/R2 等已终止安全更新的操作系统。",
+      "solution": "迁移到受支持的 Windows Server 与 IIS 版本。"
+    },
+    {
+      "id": "CVE-2017-12615", "product": "Apache Tomcat", "severity": "high",
+      "service": "http", "source": "any",
+      "regex": "Apache Tomcat/(7\\.0\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "7.0.82",
+      "title": "Tomcat PUT 方法任意代码执行",
+      "description": "7.0.0-7.0.81 在启用 PUT 方法（只读初始化参数为 false）时可通过特殊请求上传 JSP 执行代码。",
+      "solution": "升级 Tomcat 7.0.82+；确认 readonly=true。",
+      "reference": "https://tomcat.apache.org/security-7.html"
+    },
+    {
+      "id": "CVE-2024-23897", "product": "Jenkins", "severity": "high",
+      "service": "http", "source": "any",
+      "regex": "X-Jenkins:\\s*([0-9]+\\.[0-9]+\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "2.442",
+      "title": "Jenkins CLI 任意文件读取",
+      "description": "2.442/LTS 2.426.3 之前版本 args4j 解析缺陷可通过 CLI 读取控制器上的任意文件。",
+      "solution": "升级 Jenkins 到 2.442+/LTS 2.426.3+，或禁用 CLI。",
+      "reference": "https://www.jenkins.io/security/advisory/2024-01-24/"
+    },
+    {
+      "id": "VS-PHP-EOL5", "product": "PHP", "severity": "high",
+      "service": "http", "source": "poweredby",
+      "regex": "PHP/5\\.", "op": "any",
+      "title": "PHP 5.x 已停止安全维护",
+      "description": "PHP 5.x 早已 EOL，存在大量未修复漏洞，且 X-Powered-By 暴露了版本。",
+      "solution": "升级到 PHP 8.x 受支持版本；生产环境关闭 expose_php。"
+    },
+    {
+      "id": "VS-PHP-EOL7", "product": "PHP", "severity": "medium",
+      "service": "http", "source": "poweredby",
+      "regex": "PHP/7\\.[012](?:\\.|$)", "op": "any",
+      "title": "PHP 7.0/7.1/7.2 已停止维护",
+      "description": "该 PHP 分支已终止安全更新。",
+      "solution": "升级到 PHP 8.x；关闭 expose_php。"
+    },
+    {
+      "id": "CVE-2015-1427", "product": "Elasticsearch", "severity": "critical",
+      "service": "elasticsearch", "source": "body",
+      "regex": "\"number\"\\s*:\\s*\"(1\\.[0-9.]+)\"", "versionGroup": 1,
+      "op": "gte", "version": "1.0.0",
+      "title": "Elasticsearch Groovy 沙箱绕过 RCE",
+      "description": "1.x 版本默认 Groovy 脚本引擎沙箱可被绕过，未授权情况下可远程执行代码。",
+      "solution": "立即升级 Elasticsearch；禁用动态脚本；开启认证并限制网络访问。",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2015-1427"
+    },
+    {
+      "id": "CVE-2017-12635", "product": "CouchDB", "severity": "high",
+      "service": "couchdb", "source": "body",
+      "regex": "\"version\"\\s*:\\s\"(1\\.[0-9.]+)\"", "versionGroup": 1,
+      "op": "lt", "version": "1.7.0",
+      "title": "CouchDB 垂直越权创建管理员",
+      "description": "1.7.0 之前版本可通过重复 roles 字段绕过验证创建管理员用户。",
+      "solution": "升级 CouchDB 到 1.7.2/2.1.1+。"
+    },
+    {
+      "id": "CVE-2017-12635B", "product": "CouchDB", "severity": "high",
+      "service": "couchdb", "source": "body",
+      "regex": "\"version\"\\s*:\\s*\"2\\.0\\.0\"", "op": "any",
+      "title": "CouchDB 2.0.0 垂直越权",
+      "description": "2.0.0 同样受 CVE-2017-12635 影响，可创建管理员。",
+      "solution": "升级 CouchDB 到 2.1.1+。"
+    },
+    {
+      "id": "CVE-2015-4335", "product": "Redis", "severity": "medium",
+      "service": "redis", "source": "banner",
+      "regex": "Redis\\s+([0-9]+\\.[0-9]+\\.[0-9]+)", "versionGroup": 1,
+      "op": "lt", "version": "4.0.10",
+      "title": "Redis Lua 沙箱绕过",
+      "description": "旧版本 EVAL 的 Lua 沙箱不完整，结合未授权访问可能执行任意命令（3.2.13/4.0.10 修复系列问题）。",
+      "solution": "升级 Redis 到 4.0.10+/3.2.13+，并配置认证。"
+    },
+    {
+      "id": "CVE-2020-14882", "product": "Oracle WebLogic Server", "severity": "high",
+      "service": "http", "ports": [7001, 7002], "source": "any",
+      "regex": "WebLogic", "op": "any",
+      "title": "WebLogic 控制台未授权 RCE（需验证补丁）",
+      "description": "未打 CPU2020-10 补丁的 WebLogic 10.3.6/12.x 可通过控制台双重编码绕过认证并执行代码（版本未在 Banner 中体现，需人工确认补丁级别）。",
+      "solution": "安装 2020 年 10 月及之后 CPU；限制控制台访问来源。",
+      "reference": "https://www.oracle.com/security-alerts/alert-cve-2020-14882.html"
+    },
+    {
+      "id": "CVE-2021-36260", "product": "Hikvision IP Camera/NVR", "severity": "critical",
+      "service": "http", "source": "server",
+      "regex": "App-webs|Hikvision-Webs|HikvisionServer", "op": "any",
+      "title": "海康威视设备未授权命令注入风险",
+      "description": "多款海康 IP 摄像头/NVR 的 Web 组件存在未授权命令注入(CVE-2021-36260)，早期固件还存在 CVE-2017-7921 认证绕过；仅凭 Banner 无法确认固件版本。",
+      "solution": "升级到厂商最新固件；禁止将设备 Web 端口暴露公网；修改默认口令。",
+      "reference": "https://www.hikvision.com/en/support/cybersecurity/security-advisory/"
+    },
+    {
+      "id": "VS-SENDMAIL-OLD", "product": "Sendmail", "severity": "medium",
+      "service": "smtp", "source": "banner",
+      "regex": "Sendmail\\s+([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)", "versionGroup": 1,
+      "op": "lt", "version": "8.14.4",
+      "title": "Sendmail 版本过旧",
+      "description": "8.14.4 之前版本存在多个已知安全问题。",
+      "solution": "升级 Sendmail 或迁移到 Postfix，并隐藏版本 Banner。"
+    }
+  ]
+}

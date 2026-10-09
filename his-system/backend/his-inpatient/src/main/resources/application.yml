@@ -1,0 +1,30 @@
+server:
+  port: 8086
+spring:
+  application:
+    name: his-inpatient
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      driver-class-name: com.mysql.jdbc.Driver
+      url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:3306/his?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      username: ${MYSQL_USER:root}
+      password: ${MYSQL_PASSWORD:root}
+      max-active: 20
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: 6379
+    timeout: 3000
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+his:
+  gateway:
+    trust-enabled: ${GATEWAY_TRUST_ENABLED:true}
+logging:
+  level:
+    com.his: INFO

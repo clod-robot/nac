@@ -1,0 +1,34 @@
+﻿=== PEAP client setup start 09/20/2026 12:17:31 ===
+dot3svc: Running
+Root "受信任的根证书颁发机构"
+DecodeFile 返回了 系统找不到指定的路径。 0x80070003 (WIN32: 3 ERROR_PATH_NOT_FOUND)
+CertUtil: -addstore 失败: 0x80070003 (WIN32: 3 ERROR_PATH_NOT_FOUND)
+CertUtil: 系统找不到指定的路径。
+CA cert imported to LocalMachine\Root
+NIC: 以太网 4
+
+宸蹭粠 1 涓帴鍙ｅ垹闄ら厤缃枃浠躲€?
+
+
+璁剧疆鎺ュ彛 浠ュお缃?4 鐨勯厤缃枃浠舵椂鍑洪敊:
+缃戠粶杩炴帴閰嶇疆鏂囦欢鎹熷潖銆?
+
+
+=== interface state ===
+
+绯荤粺鏈?2 涓帴鍙? 
+
+    鍚嶇О             : 浠ュお缃?
+    鎻忚堪             : Killer E2600 Gigabit Ethernet Controller
+    GUID             : 7a9fa199-3b1c-4558-9152-c6152d744b58
+    鐗╃悊鍦板潃         : 08-8F-C3-89-65-C3
+    鐘舵€?            : 宸茶繛鎺ャ€傜綉缁滀笉鏀寔韬唤楠岃瘉銆?
+
+    鍚嶇О             : 浠ュお缃?4
+    鎻忚堪             : Realtek Gaming USB 2.5GbE Family Controller #2
+    GUID             : 3770ea25-2ae3-4be6-9ec8-2be804c70a6a
+    鐗╃悊鍦板潃         : 80-3F-5D-F2-6D-81
+    鐘舵€?            : 姝ｅ湪灏濊瘯韬唤楠岃瘉
+
+interface restarted
+=== done ===

@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/rules">
+        <file alias="vuln_rules.json">vuln_rules.json</file>
+    </qresource>
+</RCC>

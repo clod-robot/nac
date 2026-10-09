@@ -1,0 +1,58 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: his-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        - id: his-auth
+          uri: lb://his-auth
+          predicates:
+            - Path=/api/auth/**
+        - id: his-patient
+          uri: lb://his-patient
+          predicates:
+            - Path=/api/patient/**
+        - id: his-outpatient
+          uri: lb://his-outpatient
+          predicates:
+            - Path=/api/outpatient/**,/api/registration/**
+        - id: his-pharmacy
+          uri: lb://his-pharmacy
+          predicates:
+            - Path=/api/pharmacy/**
+        - id: his-emr
+          uri: lb://his-emr
+          predicates:
+            - Path=/api/emr/**
+        - id: his-inpatient
+          uri: lb://his-inpatient
+          predicates:
+            - Path=/api/inpatient/**
+        - id: his-billing
+          uri: lb://his-billing
+          predicates:
+            - Path=/api/billing/**
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: 6379
+    timeout: 3000
+
+his:
+  gateway:
+    internal-secret: ${NAC_INTERNAL_SECRET:HisInternal@2026-Gw2Svc}
+  jwt:
+    secret: ${JWT_SECRET:HisJwt@2026-DefaultKeyMustBeChanged}
+    expire-seconds: 28800
+
+logging:
+  level:
+    com.his: INFO
+    org.springframework.cloud.gateway: INFO

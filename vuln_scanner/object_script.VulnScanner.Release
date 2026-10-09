@@ -1,0 +1,11 @@
+build/obj/main.o
+build/obj/mainwindow.o
+build/obj/scanengine.o
+build/obj/porttask.o
+build/obj/targetparser.o
+build/obj/servicedb.o
+build/obj/vulndb.o
+build/obj/reportexport.o
+build/obj/qrc_app.o
+build/obj/moc_mainwindow.o
+build/obj/moc_scanengine.o

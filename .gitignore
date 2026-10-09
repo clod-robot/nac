@@ -1,0 +1,38 @@
+# Build
+target/
+build/
+*.jar
+*.war
+!gradle-wrapper.jar
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Python / cache
+__pycache__/
+*.pyc
+
+# 大体积媒体/转码产物(非项目源码)
+jiumen/
+*.m3u8
+*.ts
+
+# Env / secrets
+*.pem
+*.p12
+*.key
+config/application-local.yml
+application-prod.yml

@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<LANProfile xmlns="http://www.microsoft.com/networking/LAN/profile/v1">
+  <MSM>
+    <security>
+      <OneXEnforced>false</OneXEnforced>
+      <OneXEnabled>true</OneXEnabled>
+      <EAPConfig>
+        <EapHostConfig xmlns="http://www.microsoft.com/provisioning/EapHostConfig">
+          <EapMethod>
+            <Type xmlns="http://www.microsoft.com/provisioning/EapCommon">25</Type>
+            <VendorId xmlns="http://www.microsoft.com/provisioning/EapCommon">0</VendorId>
+            <VendorType xmlns="http://www.microsoft.com/provisioning/EapCommon">0</VendorType>
+            <AuthorId xmlns="http://www.microsoft.com/provisioning/EapCommon">311</AuthorId>
+          </EapMethod>
+          <Config xmlns="http://www.microsoft.com/provisioning/EapHostConfig">
+            <Eap xmlns="http://www.microsoft.com/provisioning/BaseEapConnectionPropertiesV1">
+              <Type>25</Type>
+              <EapType xmlns="http://www.microsoft.com/provisioning/PeapConnectionPropertiesV1">
+                <ServerValidation>
+                  <DisableUserPromptForServerValidation>false</DisableUserPromptForServerValidation>
+                  <ServerNames></ServerNames>
+                  <TrustedRootCA>2596327CA91D6ACA223121E0C7A03772AF5C7E01</TrustedRootCA>
+                </ServerValidation>
+                <FastReconnect>true</FastReconnect>
+                <InnerEapOptional>false</InnerEapOptional>
+                <Eap>
+                  <Type>26</Type>
+                  <EapType xmlns="http://www.microsoft.com/provisioning/MsChapV2ConnectionPropertiesV1">
+                    <UseWinLogonCredentials>false</UseWinLogonCredentials>
+                  </EapType>
+                </Eap>
+                <EnableQuarantineChecks>false</EnableQuarantineChecks>
+                <RequireCryptoBinding>false</RequireCryptoBinding>
+              </EapType>
+            </Eap>
+          </Config>
+        </EapHostConfig>
+      </EAPConfig>
+    </security>
+  </MSM>
+</LANProfile>

@@ -1,0 +1,60 @@
+# HIS 中间件一键启动：MySQL / Redis / Nacos / Kafka(KRaft)
+# 启动: docker-compose up -d
+# 后端启动前先执行 sql/his_ddl.sql 初始化数据库
+version: '3.8'
+services:
+  mysql:
+    image: mysql:5.7
+    container_name: his-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: his
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./sql/his_ddl.sql:/docker-entrypoint-initdb.d/his_ddl.sql:ro
+      - his_mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:6-alpine
+    container_name: his-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - his_redis_data:/data
+
+  nacos:
+    image: nacos/nacos-server:v2.1.2
+    container_name: his-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+
+  kafka:
+    image: bitnami/kafka:3.4
+    container_name: his-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9093,CONTROLLER://:9094
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9093
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9094
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9093:9093"
+
+volumes:
+  his_mysql_data:
+  his_redis_data:
