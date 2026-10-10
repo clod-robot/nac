@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     status        TINYINT      NOT NULL DEFAULT 1 COMMENT '状态 1启用 0禁用',
     terminal_limit INT         NOT NULL DEFAULT 5 COMMENT '终端数上限（每账号允许接入终端数）',
     auth_method   VARCHAR(16)  NOT NULL DEFAULT 'eap-tls' COMMENT '认证方式：portal / eap-tls',
+    vlan_id       INT                  DEFAULT NULL COMMENT '账号下发VLAN(1-4094)，NULL/0表示跟随全局默认',
     create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -92,6 +93,7 @@ CREATE TABLE IF NOT EXISTS sys_phone_audit (
 CREATE TABLE IF NOT EXISTS sys_online_session (
     id            BIGINT       NOT NULL AUTO_INCREMENT,
     acct_session_id VARCHAR(64) NOT NULL COMMENT '计费会话ID',
+    username      VARCHAR(64)           DEFAULT NULL COMMENT '真实用户名',
     username_mask VARCHAR(64)           DEFAULT NULL COMMENT '脱敏用户名',
     mac           VARCHAR(32)           DEFAULT NULL,
     nas_ip        VARCHAR(64)           DEFAULT NULL,
@@ -176,3 +178,62 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'grantMinut
 INSERT INTO sys_portal_config (config_key, config_value, remark)
 SELECT 'phoneAuditEnabled', 'false', '手机号审查模式'
 WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'phoneAuditEnabled');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'portalUrl', 'https://192.168.100.2', 'Portal访问地址(主机，WiFi用户认证入口)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'portalUrl');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'antiForgeryEnabled', 'false', '防伪推开关(防伪造重定向URL)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'antiForgeryEnabled');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'antiForgerySecret', '', '防伪推共享密码(与设备Portal服务器一致，sign=HMAC-SHA256(密码,ts|mac))'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'antiForgerySecret');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'portalV2Enabled', 'false', 'Portal v2.0协议开关(CMCC标准Portal协议UDP服务端)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'portalV2Enabled');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'portalV2Port', '2000', 'Portal v2.0 UDP监听端口'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'portalV2Port');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'portalV2Secret', '', 'Portal v2.0共享密钥(与NAS设备CHAP认证一致，开启后必填)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'portalV2Secret');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'portalProtocol', 'both', 'Portal协议版本(both=兼容v1/v2, v1, v2)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'portalProtocol');
+-- Portal 页面定制（品牌视觉，非敏感，匿名公开接口可见）
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'siteName', '默认站点', '站点名称(1-32)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'siteName');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'title', '网络准入认证', '页面标题(1-32)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'title');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'notice', '欢迎', '公告栏(1-128)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'notice');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'logo', '', 'LOGO图片URL'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'logo');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'carousel', '', '轮播图片URL列表(逗号分隔)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'carousel');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'bgType', 'color', '背景类型(image=图片, color=纯色)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'bgType');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'bgImage', '', '背景图片URL'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'bgImage');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'bgColor', '#0b5cab', '背景纯色'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'bgColor');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'copyright', '', '版权信息(1-100)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'copyright');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'anonymousAuth', 'false', '免认证认证开关(true=开启)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'anonymousAuth');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'portalAuthType', 'sms', 'Portal 认证类型(sms=短信/account=账号/both=两者都支持)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'portalAuthType');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'buttonText', '登录', '认证按钮文字'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'buttonText');
+

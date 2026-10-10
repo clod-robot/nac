@@ -13,13 +13,16 @@
     </div>
     <el-table :data="list" border>
       <el-table-column prop="acctSessionId" label="会话ID" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="usernameMask" label="用户" width="120" />
+      <el-table-column prop="username" label="用户" width="120" show-overflow-tooltip />
       <el-table-column prop="mac" label="MAC" width="150" />
       <el-table-column prop="nasIp" label="NAS IP" width="130" />
       <el-table-column prop="framedIp" label="终端IP" width="130" />
       <el-table-column prop="vlanId" label="VLAN" width="70" />
       <el-table-column label="上线时间" width="150">
         <template #default="{ row }">{{ fmt(row.startTime) }}</template>
+      </el-table-column>
+      <el-table-column label="在线时长" width="110">
+        <template #default="{ row }">{{ duration(row.startTime) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="110" fixed="right">
         <template #default="{ row }">
@@ -36,7 +39,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { onlineList, onlineDelete } from '../api/auth'
@@ -46,6 +49,7 @@ const list = ref([]); const total = ref(0); const page = ref(1); const size = re
 const loading = ref(false)
 const f = ref({ username: '', mac: '', ip: '' })
 const fmt = fmtTime
+let timer = null
 
 async function load() {
   loading.value = true
@@ -58,6 +62,20 @@ async function load() {
     list.value = r.data.list; total.value = r.data.total
   } finally { loading.value = false }
 }
+/** 由上线时间推算在线时长（如 2天3时 / 3时12分 / 5分）。 */
+function duration(start) {
+  if (!start) return '—'
+  const t = new Date(String(start).replace(' ', 'T')).getTime()
+  if (isNaN(t)) return '—'
+  let s = Math.floor((Date.now() - t) / 1000)
+  if (s < 0) s = 0
+  const d = Math.floor(s / 86400); s %= 86400
+  const h = Math.floor(s / 3600); s %= 3600
+  const m = Math.floor(s / 60)
+  if (d > 0) return d + '天' + h + '时'
+  if (h > 0) return h + '时' + m + '分'
+  return Math.max(1, m) + '分'
+}
 async function offline(row) {
   await onlineDelete(row.id)
   ElMessage.success('已下线')
@@ -66,7 +84,8 @@ async function offline(row) {
 function reload() { page.value = 1; load() }
 function reset() { f.value = { username: '', mac: '', ip: '' }; reload() }
 function onPage(p) { page.value = p; load() }
-onMounted(load)
+onMounted(() => { load(); timer = setInterval(load, 30000) })
+onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
 
 <style scoped>

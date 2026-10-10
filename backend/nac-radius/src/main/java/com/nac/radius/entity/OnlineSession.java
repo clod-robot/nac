@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public class OnlineSession {
     private Long id;
     private String acctSessionId;
+    private String username;
     private String usernameMask;
     private String mac;
     private String nasIp;

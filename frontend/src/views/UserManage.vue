@@ -4,22 +4,31 @@
       <div class="head">
         <span>账号管理</span>
         <div class="head-right">
-          <el-input v-model="keyword" placeholder="搜索账号/姓名/手机号" clearable size="small"
-            style="width:210px;margin-right:8px" @keyup.enter="onSearch" @clear="onSearch">
-            <template #append><el-button @click="onSearch">搜索</el-button></template>
-          </el-input>
-          <el-select v-model="deptFilter" placeholder="按部门筛选" clearable size="small" style="width:160px;margin-right:8px">
+          <!-- 字段检索：左侧选字段，中间输入，右侧检索 -->
+          <el-select v-model="searchField" size="default" style="width:108px">
+            <el-option label="部门" value="dept" />
+            <el-option label="下发VLAN" value="vlan" />
+          </el-select>
+          <el-select v-if="searchField === 'dept'" v-model="deptFilter" filterable allow-create default-first-option
+            placeholder="输入/选择部门" clearable size="default" style="width:180px">
             <el-option v-for="d in deptOptions" :key="d" :label="d" :value="d" />
           </el-select>
-          <el-button type="primary" size="small" @click="openCreate">新增账号</el-button>
-          <el-button size="small" @click="downloadTemplate">下载模板</el-button>
-          <el-button size="small" type="success" :loading="importing" @click="fileInput?.click()">批量导入</el-button>
+          <el-input v-else v-model="vlanFilter" placeholder="VLAN 数字，0=全局" clearable size="default"
+            style="width:170px" @keyup.enter="applyFilter" />
+          <el-button size="default" type="primary" @click="applyFilter">检索</el-button>
+          <el-input v-model="keyword" placeholder="搜索账号/姓名/手机号" clearable size="default"
+            style="width:210px;margin-left:12px" @keyup.enter="onSearch" @clear="onSearch">
+            <template #append><el-button @click="onSearch">搜索</el-button></template>
+          </el-input>
+          <el-button type="primary" size="default" @click="openCreate">新增账号</el-button>
+          <el-button size="default" @click="downloadTemplate">下载模板</el-button>
+          <el-button size="default" type="success" :loading="importing" @click="fileInput?.click()">批量导入</el-button>
           <input ref="fileInput" type="file" accept=".csv" style="display:none" @change="onImportFile" />
         </div>
       </div>
     </template>
 
-    <el-table :data="filteredList" border v-loading="loading">
+    <el-table :data="filteredList" border stripe v-loading="loading" style="width:100%">
       <el-table-column prop="username" label="账号" min-width="120" />
       <el-table-column prop="realName" label="归属人" min-width="110" />
       <el-table-column label="联系电话" min-width="130">
@@ -38,12 +47,15 @@
           <el-tag :type="row.roleCode === 'admin' ? 'danger' : 'info'">{{ row.roleCode === 'admin' ? '管理员' : '普通用户' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="认证方式" width="120">
+      <el-table-column label="认证方式" width="150">
         <template #default="{ row }">
-          <el-select v-model="row.authMethod" size="small" style="width:100%" @change="saveAuthMethod(row)">
-            <el-option label="Portal 认证" value="portal" />
-            <el-option label="EAP-TLS 认证" value="eap-tls" />
-          </el-select>
+          <el-tag v-for="m in authMethodTags(row)" :key="m" size="small" type="info" style="margin-right:4px">{{ m }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="下发VLAN" width="120">
+        <template #default="{ row }">
+          <el-input v-model="row.vlanId" size="small" placeholder="0=全局" clearable
+            @change="saveVlan(row)" style="width:100%" />
         </template>
       </el-table-column>
       <el-table-column label="终端数量" width="150">
@@ -91,12 +103,16 @@
           </el-select>
         </el-form-item>
         <el-form-item label="认证方式">
-          <el-select v-model="form.authMethod" style="width:100%">
-            <el-option label="Portal 认证" value="portal" />
-            <el-option label="EAP-TLS 认证" value="eap-tls" />
-          </el-select>
+          <div>
+            <el-tag size="small" type="info" style="margin-right:6px">Portal 认证</el-tag>
+            <el-tag size="small" type="info">EAP-TLS 认证</el-tag>
+            <div style="font-size:12px;color:#909399;line-height:1.4;margin-top:4px">账号同时支持以上两种认证方式</div>
+          </div>
         </el-form-item>
         <el-form-item label="终端数量"><el-input-number v-model="form.terminalLimit" :min="0" :max="9999" /></el-form-item>
+        <el-form-item label="下发VLAN"><el-input v-model="form.vlanId" placeholder="0=全局，可填 1-4094" style="width:100%" />
+          <div style="font-size:12px;color:#909399;line-height:1.4">认证通过时下发该 VLAN；0 或留空表示跟随全局默认</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -155,7 +171,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userUpdateAuthMethod, userUpdateProfile, userResetPassword, userDelete, userDownloadTemplate, userImport } from '../api/auth'
+import { userList, userCreate, userUpdateStatus, userUpdateLimit, userUpdateDept, userUpdateVlan, userUpdateProfile, userResetPassword, userDelete, userDownloadTemplate, userImport } from '../api/auth'
 import { fmtTime } from '../utils/format'
 const fmt = fmtTime
 import { useBreakpoints } from '../composables/useBreakpoints'
@@ -166,11 +182,25 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
+const searchField = ref('dept')
+const vlanFilter = ref('')
 const deptFilter = ref('')
 const keyword = ref('')
+// 检索按钮：过滤为实时响应式，此处保留入口便于显式触发/聚焦
+function applyFilter() {}
 
 const deptOptions = computed(() => [...new Set(list.value.map(u => u.dept).filter(Boolean))])
-const filteredList = computed(() => deptFilter.value ? list.value.filter(u => u.dept === deptFilter.value) : list.value)
+// 筛选条：部门 + 下发VLAN（VLAN 直接输数字，0=全局），前端本地过滤
+const filteredList = computed(() => list.value.filter(u => {
+  if (deptFilter.value && u.dept !== deptFilter.value) return false
+  if (vlanFilter.value !== '' && vlanFilter.value != null) {
+    const want = String(vlanFilter.value).trim()
+    const got = u.vlanId == null || u.vlanId === 0 ? '0' : String(u.vlanId)
+    if (want === '0') { if (got !== '0') return false }
+    else if (got !== want) return false
+  }
+  return true
+}))
 
 async function load() {
   loading.value = true
@@ -187,19 +217,25 @@ function onSearch() { page.value = 1; load() }
 
 const createVisible = ref(false)
 const saving = ref(false)
-const form = ref({ username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5, authMethod: 'eap-tls' })
+const form = ref({ username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5, authMethod: 'eap-tls,portal', vlanId: 0 })
 function openCreate() {
-  form.value = { username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5, authMethod: 'eap-tls' }
+  form.value = { username: '', password: '', realName: '', phone: '', dept: '', roleCode: 'user', terminalLimit: 5, authMethod: 'eap-tls,portal', vlanId: 0 }
   createVisible.value = true
 }
 async function onCreate() {
   saving.value = true
   try {
-    await userCreate(form.value)
+    await userCreate({ ...form.value, authMethod: 'eap-tls,portal' })
     ElMessage.success('已创建')
     createVisible.value = false
     load()
   } finally { saving.value = false }
+}
+// 认证方式展示：把后端存储的逗号串拆成中文标签
+function authMethodTags(row) {
+  const map = { portal: 'Portal', 'eap-tls': 'EAP-TLS' }
+  const arr = (row.authMethod || 'eap-tls,portal').split(',').map(s => s.trim()).filter(Boolean)
+  return arr.map(m => map[m] || m)
 }
 
 const editVisible = ref(false)
@@ -237,10 +273,11 @@ async function saveDept(row) {
     ElMessage.success('部门已更新')
   } catch (e) { load() }
 }
-async function saveAuthMethod(row) {
+async function saveVlan(row) {
+  const v = (row.vlanId === '' || row.vlanId == null) ? 0 : Number(row.vlanId)
   try {
-    await userUpdateAuthMethod({ id: row.id, authMethod: row.authMethod || 'eap-tls' })
-    ElMessage.success('认证方式已更新')
+    await userUpdateVlan({ id: row.id, vlanId: v })
+    ElMessage.success(v > 0 ? `已下发 VLAN ${v}` : '已跟随全局默认')
   } catch (e) { load() }
 }
 
@@ -303,5 +340,5 @@ async function onImportFile(e) {
 
 <style scoped>
 .head { display: flex; justify-content: space-between; align-items: center; }
-.head-right { display: flex; align-items: center; }
+.head-right { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 </style>

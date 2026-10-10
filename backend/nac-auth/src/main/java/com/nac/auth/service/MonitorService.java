@@ -14,11 +14,13 @@ import oshi.hardware.NetworkIF;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,11 +58,12 @@ public class MonitorService {
     private volatile Integer memFreq;
     private volatile boolean freqTried;
 
-    /** 微服务/中间件存活探测（按本地端口） */
+    /** 微服务/中间件存活探测（按本地端口）；第三列为协议，tcp 走 connect 探测，udp 走 ss -lun 监听检测 */
     private static final Object[][] SERVICES = {
-            {"Nginx", 443}, {"Redis", 6379}, {"Kafka", 9092}, {"MySQL", 3306},
-            {"网关 gateway", 8080}, {"认证 auth", 8081}, {"用户 user", 8082},
-            {"RADIUS", 8083}, {"日志 log", 8084}
+            {"Nginx", 443, "tcp"}, {"Redis", 6379, "tcp"}, {"Kafka", 9092, "tcp"}, {"MySQL", 3306, "tcp"},
+            {"网关 gateway", 8080, "tcp"}, {"认证 auth", 8081, "tcp"}, {"用户 user", 8082, "tcp"},
+            {"RADIUS", 8083, "tcp"}, {"日志 log", 8084, "tcp"},
+            {"RADIUS 认证/授权", 1812, "udp"}, {"RADIUS 计费", 1813, "udp"}
     };
 
     public MonitorService(NetworkService networkService) {
@@ -191,15 +194,41 @@ public class MonitorService {
     }
 
     private List<MonitorSnapshot.Svc> checkServices() {
+        Set<String> udpPorts = udpListeningPorts();
         List<MonitorSnapshot.Svc> list = new ArrayList<>();
         for (Object[] svc : SERVICES) {
+            String name = (String) svc[0];
+            int port = (Integer) svc[1];
+            String proto = svc.length > 2 ? (String) svc[2] : "tcp";
             MonitorSnapshot.Svc s = new MonitorSnapshot.Svc();
-            s.setName((String) svc[0]);
-            s.setPort((Integer) svc[1]);
-            s.setOnline(portOpen((Integer) svc[1]));
+            s.setName(name);
+            s.setPort(port);
+            s.setOnline("udp".equals(proto) ? udpPorts.contains(String.valueOf(port)) : portOpen(port));
             list.add(s);
         }
         return list;
+    }
+
+    /** 读取本机正在监听的 UDP 端口（运行 ss -lun，解析 Local Address:Port 的端口号）。 */
+    private Set<String> udpListeningPorts() {
+        Set<String> ports = new HashSet<>();
+        try {
+            Process p = new ProcessBuilder("ss", "-lun").redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            p.waitFor(2, TimeUnit.SECONDS);
+            for (String line : out.split("\\n")) {
+                for (String tok : line.trim().split("\\s+")) {
+                    int c = tok.lastIndexOf(':');            // 形如 0.0.0.0:1812 / [::]:1813 / *:1812
+                    if (c > 0 && c < tok.length() - 1) {
+                        String port = tok.substring(c + 1);
+                        if (port.matches("\\d{1,5}")) ports.add(port);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("读取 UDP 监听端口失败: {}", e.getMessage());
+        }
+        return ports;
     }
 
     private boolean portOpen(int port) {

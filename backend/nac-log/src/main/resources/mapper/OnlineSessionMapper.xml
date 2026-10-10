@@ -2,12 +2,12 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.nac.log.mapper.OnlineSessionMapper">
 
-    <sql id="cols">id, acct_session_id, username_mask, mac, nas_ip, framed_ip, vlan_id, status, start_time, update_time</sql>
+    <sql id="cols">id, acct_session_id, username, username_mask, mac, nas_ip, framed_ip, vlan_id, status, start_time, update_time</sql>
 
     <sql id="cond">
         <where>
             status = 1
-            <if test="username != null and username != ''">AND username_mask LIKE CONCAT('%',#{username},'%')</if>
+            <if test="username != null and username != ''">AND (username LIKE CONCAT('%',#{username},'%') OR username_mask LIKE CONCAT('%',#{username},'%'))</if>
             <if test="mac != null and mac != ''">AND mac LIKE CONCAT('%',#{mac},'%')</if>
             <if test="ip != null and ip != ''">AND framed_ip LIKE CONCAT('%',#{ip},'%')</if>
         </where>

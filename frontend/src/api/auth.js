@@ -14,6 +14,11 @@ export const portalConfig = () => request.get('/api/portal/config')
 export const portalAuth = (data) => request.post('/api/portal/auth', data)
 export const portalAdminConfig = () => request.get('/api/portal/admin/config')
 export const updatePortalConfig = (data) => request.put('/api/portal/admin/config', data)
+export const portalVerify = (params) => request.get('/api/portal/verify', { params })
+// Portal 页面定制：图片资源上传（LOGO/轮播/背景）
+export const uploadPortalAsset = (formData) => request.post('/api/portal/admin/upload', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000
+})
 
 // 日志
 export const logList = (params) => request.get('/api/log/list', { params })
@@ -39,6 +44,7 @@ export const userUpdateStatus = (data) => request.put('/api/auth/admin/users/sta
 export const userUpdateLimit = (data) => request.put('/api/auth/admin/users/terminal-limit', data)
 export const userUpdateDept = (data) => request.put('/api/auth/admin/users/dept', data)
 export const userUpdateAuthMethod = (data) => request.put('/api/auth/admin/users/auth-method', data)
+export const userUpdateVlan = (data) => request.put('/api/auth/admin/users/vlan', data)
 export const userUpdateProfile = (data) => request.put('/api/auth/admin/users/profile', data)
 export const userResetPassword = (data) => request.put('/api/auth/admin/users/password', data)
 export const userDelete = (id) => request.delete(`/api/auth/admin/users/${id}`)
@@ -82,3 +88,4 @@ export const uploadRadiusCa = (formData) => request.post('/api/radius/config/ca'
   headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000
 })
 export const downloadRadiusCa = () => request.get('/api/radius/config/ca.pem', { responseType: 'blob' })
+export const portalStatus = () => request.get('/api/radius/portal/status')

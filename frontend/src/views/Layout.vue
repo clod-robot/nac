@@ -7,7 +7,11 @@
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
-        <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
+        <el-sub-menu v-permission="['admin']" index="portal">
+          <template #title><el-icon><Setting /></el-icon><span>Portal 配置</span></template>
+          <el-menu-item index="/portal-config">协议配置</el-menu-item>
+          <el-menu-item index="/portal-page">页面定制</el-menu-item>
+        </el-sub-menu>
         <el-menu-item v-permission="['admin']" index="/system-config"><el-icon><Tools /></el-icon><span>参数配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/network"><el-icon><Connection /></el-icon><span>网络管理</span></el-menu-item>
@@ -65,7 +69,11 @@
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon><span>仪表盘</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
-        <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
+        <el-sub-menu v-permission="['admin']" index="portal">
+          <template #title><el-icon><Setting /></el-icon><span>Portal 配置</span></template>
+          <el-menu-item index="/portal-config">协议配置</el-menu-item>
+          <el-menu-item index="/portal-page">页面定制</el-menu-item>
+        </el-sub-menu>
         <el-menu-item v-permission="['admin']" index="/system-config"><el-icon><Tools /></el-icon><span>参数配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/network"><el-icon><Connection /></el-icon><span>网络管理</span></el-menu-item>

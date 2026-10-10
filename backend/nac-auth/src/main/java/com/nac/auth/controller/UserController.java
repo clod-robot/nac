@@ -105,6 +105,7 @@ public class UserController {
         private String roleCode;
         private Integer terminalLimit;
         private String authMethod; // 认证方式：portal / eap-tls
+        private Integer vlanId; // 下发VLAN：1-4094，空/0表示跟随全局默认
     }
 
     @PostMapping
@@ -150,6 +151,7 @@ public class UserController {
         u.setStatus(1);
         u.setTerminalLimit(req.getTerminalLimit() == null ? 5 : req.getTerminalLimit());
         u.setAuthMethod(normalizeAuthMethod(req.getAuthMethod()));
+        u.setVlanId(normalizeVlan(req.getVlanId()));
         userMapper.insert(u);
     }
 
@@ -345,11 +347,36 @@ public class UserController {
         return Result.success();
     }
 
-    /** 认证方式归一化：空/非法一律回退 eap-tls，白名单校验 */
+    @Data
+    public static class VlanReq {
+        private Long id;
+        private Integer vlanId; // 1-4094，空/0表示清除并跟随全局默认
+    }
+
+    /** 修改账号下发 VLAN：认证通过时在 Access-Accept 里下发该 VLAN（Tunnel-Private-Group-Id）。 */
+    @PutMapping("/vlan")
+    @RequireRole
+    @OperationLog("修改账号下发VLAN")
+    public Result<Void> vlan(@RequestBody VlanReq req) {
+        userMapper.updateVlan(req.getId(), normalizeVlan(req.getVlanId()));
+        return Result.success();
+    }
+
+    /** 认证方式归一化：支持逗号多值（如 eap-tls,portal），白名单过滤+去重，空/非法回退 eap-tls */
     private String normalizeAuthMethod(String m) {
         if (m == null) return "eap-tls";
-        String v = m.trim().toLowerCase();
-        return ALLOWED_AUTH_METHODS.contains(v) ? v : "eap-tls";
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+        for (String part : m.split(",")) {
+            String v = part.trim().toLowerCase();
+            if (ALLOWED_AUTH_METHODS.contains(v)) set.add(v);
+        }
+        return set.isEmpty() ? "eap-tls" : String.join(",", set);
+    }
+
+    /** VLAN 归一化：空/0/越界 → null（跟随全局默认），合法 1-4094 原样返回 */
+    private Integer normalizeVlan(Integer v) {
+        if (v == null || v <= 0 || v > 4094) return null;
+        return v;
     }
 
     @Data

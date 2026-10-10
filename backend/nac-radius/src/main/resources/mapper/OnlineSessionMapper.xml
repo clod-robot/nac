@@ -3,25 +3,47 @@
 <mapper namespace="com.nac.radius.mapper.OnlineSessionMapper">
 
     <insert id="upsert" parameterType="com.nac.radius.entity.OnlineSession">
-        INSERT INTO sys_online_session (acct_session_id, username_mask, mac, nas_ip, framed_ip, vlan_id, status)
-        VALUES (#{acctSessionId}, #{usernameMask}, #{mac}, #{nasIp}, #{framedIp}, #{vlanId}, 1)
+        INSERT INTO sys_online_session (acct_session_id, username, username_mask, mac, nas_ip, framed_ip, vlan_id, status, start_time)
+        VALUES (#{acctSessionId}, #{username}, #{usernameMask}, #{mac}, #{nasIp}, #{framedIp}, #{vlanId}, 1, IFNULL(#{startTime}, NOW()))
         ON DUPLICATE KEY UPDATE
-            username_mask = VALUES(username_mask),
-            mac = VALUES(mac),
-            nas_ip = VALUES(nas_ip),
-            framed_ip = VALUES(framed_ip),
-            vlan_id = VALUES(vlan_id),
-            status = 1
+            username      = COALESCE(VALUES(username), username),
+            username_mask = COALESCE(VALUES(username_mask), username_mask),
+            mac           = VALUES(mac),
+            nas_ip        = COALESCE(VALUES(nas_ip), nas_ip),
+            framed_ip     = COALESCE(VALUES(framed_ip), framed_ip),
+            vlan_id       = COALESCE(VALUES(vlan_id), vlan_id),
+            start_time    = start_time,
+            status        = 1
     </insert>
 
     <update id="markOffline">
         UPDATE sys_online_session SET status = 0 WHERE acct_session_id = #{acctSessionId}
     </update>
 
+    <!-- 同一终端(MAC)新会话上线时，将该 MAC 其它仍在线的旧会话置离线，避免幽灵在线 -->
+    <update id="markOthersOffline">
+        UPDATE sys_online_session SET status = 0
+        WHERE mac = #{mac} AND status = 1 AND acct_session_id &lt;&gt; #{acctSessionId}
+    </update>
+
+    <!-- 定时清扫：超过 ${minutes} 分钟未更新的在线会话视为离线（收不到 Stop 的兜底） -->
+    <update id="markStaleOffline">
+        UPDATE sys_online_session SET status = 0
+        WHERE status = 1 AND update_time &lt; DATE_SUB(NOW(), INTERVAL #{minutes} MINUTE)
+    </update>
+
     <select id="selectBySessionId" resultType="com.nac.radius.entity.OnlineSession">
         SELECT id, acct_session_id, username_mask, mac, nas_ip, framed_ip, vlan_id, status, start_time, update_time
         FROM sys_online_session
         WHERE acct_session_id = #{acctSessionId}
+        LIMIT 1
+    </select>
+
+    <select id="selectLatestByMac" resultType="com.nac.radius.entity.OnlineSession">
+        SELECT id, acct_session_id, start_time, update_time
+        FROM sys_online_session
+        WHERE mac = #{mac}
+        ORDER BY id DESC
         LIMIT 1
     </select>
 </mapper>

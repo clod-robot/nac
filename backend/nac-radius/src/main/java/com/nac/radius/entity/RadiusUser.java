@@ -13,4 +13,5 @@ public class RadiusUser {
     private String passwordHash;       // BCrypt（PAP 兜底校验用）
     private String radiusPasswordCipher; // AES-256-GCM 可逆密文，RADIUS 专用
     private Integer status;            // 1启用 0禁用
+    private Integer vlanId;            // 账号下发VLAN(1-4094)，null 表示跟随全局默认
 }

@@ -9,6 +9,10 @@ spring:
       discovery:
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:public}
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB:nac}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: ${MYSQL_USER:root}

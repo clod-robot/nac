@@ -97,6 +97,21 @@ public class RadiusAuthService {
         return c;
     }
 
+    /** 生效 VLAN：账号级优先，未配置则回退全局默认；<=0 表示不下发。 */
+    private int effectiveVlan(RadiusUser user) {
+        if (user != null && user.getVlanId() != null && user.getVlanId() > 0) return user.getVlanId();
+        return props.getVlanId();
+    }
+
+    /** 向 Accept 追加 VLAN 授权属性（Tunnel-Type/Medium/Private-Group-Id），vlan<=0 跳过。 */
+    private void addVlan(RadiusPacket accept, int vlan) {
+        if (vlan > 0) {
+            accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);          // VLAN
+            accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);     // 802
+            accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(vlan));
+        }
+    }
+
     /** 处理 Access-Request，返回响应报文（Accept/Reject），异常时返回 Reject。 */
     public RadiusPacket authenticate(RadiusPacket request) {
         String username = request.getString(RadiusCodes.USER_NAME);
@@ -108,11 +123,7 @@ public class RadiusAuthService {
         if (isExempt(callingMac, framedIp)) {
             RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
             accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
-            if (props.getVlanId() > 0) {
-                accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
-                accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);
-                accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
-            }
+            addVlan(accept, props.getVlanId());
             accept.addString(RadiusCodes.REPLY_MESSAGE, "exempt terminal accepted");
             recordAuth(request, 1, "免认证终端放行");
             log.info("RADIUS 免认证放行: mac={} ip={}", callingMac, framedIp);
@@ -166,12 +177,7 @@ public class RadiusAuthService {
         clearFailures(username);
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
         accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
-        if (props.getVlanId() > 0) {
-            // Tunnel-Type = VLAN(13), Tunnel-Medium-Type = 802(6), Tunnel-Private-Group-Id = vlan
-            accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
-            accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);
-            accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
-        }
+        addVlan(accept, effectiveVlan(user));
         accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(username));
         recordAuth(request, 1, "认证成功");
         log.info("RADIUS 认证成功: user={} nas={}", mask(username), nasIpOf(request));
@@ -244,11 +250,7 @@ public class RadiusAuthService {
             RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
             putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
             accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
-            if (props.getVlanId() > 0) {
-                accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
-                accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);
-                accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
-            }
+            addVlan(accept, effectiveVlan(user));
             accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(user.getUsername()));
             accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
             recordAuth(request, 1, "EAP-MD5 认证成功");
@@ -354,11 +356,7 @@ public class RadiusAuthService {
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
         putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, request.getIdentifier(), null));
         accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
-        if (props.getVlanId() > 0) {
-            accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
-            accept.addInt(RadiusCodes.TUNNEL_MEDIUM_TYPE, 6);
-            accept.addString(RadiusCodes.TUNNEL_PRIVATE_GROUP_ID, String.valueOf(props.getVlanId()));
-        }
+        addVlan(accept, effectiveVlan(user));
         accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(user.getUsername()));
         accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
         recordAuth(request, 1, method + " 认证成功");

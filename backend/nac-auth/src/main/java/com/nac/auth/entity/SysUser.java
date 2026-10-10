@@ -21,6 +21,7 @@ public class SysUser {
     private Integer status;
     private Integer terminalLimit; // 终端数上限（每账号允许接入的终端数量）
     private String authMethod; // 认证方式：portal / eap-tls
+    private Integer vlanId; // 账号下发VLAN(1-4094)，NULL/0表示跟随全局默认
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private String phoneMasked; // 仅展示用（脱敏手机号），非持久化字段

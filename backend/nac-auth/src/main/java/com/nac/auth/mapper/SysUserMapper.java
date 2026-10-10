@@ -36,6 +36,9 @@ public interface SysUserMapper {
 
     int updateAuthMethod(@Param("id") Long id, @Param("authMethod") String authMethod);
 
+    /** 更新账号下发 VLAN（传 null 表示清除，跟随全局默认） */
+    int updateVlan(@Param("id") Long id, @Param("vlanId") Integer vlanId);
+
     /** 更新归属部门与使用人(姓名) */
     int updateProfile(@Param("id") Long id, @Param("dept") String dept, @Param("realName") String realName);
 
