@@ -24,11 +24,10 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class EapTlsSupport {
 
-    /** 单个 EAP-TLS 报文承载的最大 TLS 字节数（可配置，受交换机 EAPOL MTU 约束）。 */
-    private final int fragment;
     private static final long SESSION_TTL_MS = 60_000;
 
-    private final SSLContext sslContext;
+    private final CertManager certManager;
+    private final com.nac.radius.service.RadiusConfigService configService;
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
     private final ExecutorService taskExecutor = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "radius-tls-task");
@@ -36,11 +35,14 @@ public class EapTlsSupport {
         return t;
     });
 
-    public EapTlsSupport(CertManager certManager, com.nac.radius.config.RadiusProperties props) throws Exception {
-        this.sslContext = certManager.serverSslContext();
-        int f = props.getEapFragmentSize();
-        // 钳制到安全区间：过小则往返多、过大则超出 EAPOL MTU 被交换机丢弃。
-        this.fragment = Math.max(128, Math.min(1400, f));
+    public EapTlsSupport(CertManager certManager, com.nac.radius.service.RadiusConfigService configService) {
+        this.certManager = certManager;
+        this.configService = configService;
+    }
+
+    /** 当前分片上限（热加载：管理端修改后 3s 内对新握手生效）。 */
+    private int fragment() {
+        return configService.fragmentSize();
     }
 
     /** 一次处理的结果：outgoingTls 为需下发的 TLS 字节；appData 为握手完成后解出的明文（PEAP 内层 EAP）。 */
@@ -61,7 +63,7 @@ public class EapTlsSupport {
     }
 
     public String newSession(boolean needClientAuth) throws SSLException {
-        SSLEngine engine = sslContext.createSSLEngine();
+        SSLEngine engine = certManager.serverSslContext().createSSLEngine();
         engine.setUseClientMode(false);
         engine.setNeedClientAuth(needClientAuth);
         // 强制 TLS 1.2：EAP-TLS 业界主流实现（含 OpenSSL 1.1.1 类客户端）对 TLS 1.3 互操作兼容性差，
@@ -116,9 +118,9 @@ public class EapTlsSupport {
                     if (s.clientAuth && !hasPeerCert(engine)) {
                         return new StepResult(null, false, false, true, "no client cert", null);
                     }
-                    return new StepResult(out, out.length > fragment, true, false, null, null);
-                }
-                return new StepResult(out, out.length > fragment, false, false, null, null);
+                    return new StepResult(out, out.length > fragment(), true, false, null, null);
+                    }
+                return new StepResult(out, out.length > fragment(), false, false, null, null);
             }
             // 3) 握手已完成：返回解出的应用明文（PEAP 内层 EAP）；EAP-TLS 终点由 success 上一轮处理
             return new StepResult(null, false, false, false, null, appData);
@@ -150,6 +152,7 @@ public class EapTlsSupport {
     /** 构造 EAP-TLS 数据字段：flags[+len]+payload，按 fragment 分片。返回 EAP data（不含 EAP 头）列表。
      *  RFC 5216：仅首片携带 L 标志与 4 字节【总长度】，后续分片不含长度字段；S 标志置首片，M 标志置非末片。 */
     public byte[][] fragmentForEap(byte[] tls) {
+        int fragment = fragment();
         if (tls == null) tls = new byte[0];
         if (tls.length <= fragment) {
             return new byte[][]{eapTlsData(tls, 0, -1)};

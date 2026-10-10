@@ -13,6 +13,7 @@ const routes = [
       { path: 'user', component: () => import('../views/UserManage.vue'), meta: { roles: ['admin'] } },
       { path: 'exempt-terminals', component: () => import('../views/ExemptTerminals.vue'), meta: { roles: ['admin'] } },
       { path: 'portal-config', component: () => import('../views/PortalConfig.vue'), meta: { roles: ['admin'] } },
+      { path: 'system-config', component: () => import('../views/SystemConfig.vue'), meta: { roles: ['admin'] } },
       { path: 'sms-gateway', component: () => import('../views/SmsGateway.vue'), meta: { roles: ['admin'] } },
       { path: 'network', component: () => import('../views/NetworkManage.vue'), meta: { roles: ['admin'] } },
       { path: 'nas', component: () => import('../views/NasManage.vue'), meta: { roles: ['admin'] } },

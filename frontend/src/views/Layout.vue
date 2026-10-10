@@ -8,6 +8,7 @@
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/system-config"><el-icon><Tools /></el-icon><span>参数配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/network"><el-icon><Connection /></el-icon><span>网络管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/nas"><el-icon><Key /></el-icon><span>NAS管理</span></el-menu-item>
@@ -65,6 +66,7 @@
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/portal-config"><el-icon><Setting /></el-icon><span>Portal 配置</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/system-config"><el-icon><Tools /></el-icon><span>参数配置</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/sms-gateway"><el-icon><Message /></el-icon><span>短信网关</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/network"><el-icon><Connection /></el-icon><span>网络管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/nas"><el-icon><Key /></el-icon><span>NAS管理</span></el-menu-item>
@@ -106,7 +108,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Odometer, Setting, Message, Document, Tickets, Monitor, Connection, ArrowDown, Key, Menu, User, Share, Clock, Edit } from '@element-plus/icons-vue'
+import { Odometer, Setting, Tools, Message, Document, Tickets, Monitor, Connection, ArrowDown, Key, Menu, User, Share, Clock, Edit } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import { logout, getSystemInfo, setSystemNtp, userResetPassword, userUpdateProfile } from '../api/auth'
 import { useBreakpoints } from '../composables/useBreakpoints'
