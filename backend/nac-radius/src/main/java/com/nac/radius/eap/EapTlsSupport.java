@@ -24,8 +24,8 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class EapTlsSupport {
 
-    /** 单个 EAP-TLS 报文承载的最大 TLS 字节数（RADIUS 属性单字节长度上限 255，需留余量）。 */
-    private static final int FRAGMENT = 240;
+    /** 单个 EAP-TLS 报文承载的最大 TLS 字节数（可配置，受交换机 EAPOL MTU 约束）。 */
+    private final int fragment;
     private static final long SESSION_TTL_MS = 60_000;
 
     private final SSLContext sslContext;
@@ -36,8 +36,11 @@ public class EapTlsSupport {
         return t;
     });
 
-    public EapTlsSupport(CertManager certManager) throws Exception {
+    public EapTlsSupport(CertManager certManager, com.nac.radius.config.RadiusProperties props) throws Exception {
         this.sslContext = certManager.serverSslContext();
+        int f = props.getEapFragmentSize();
+        // 钳制到安全区间：过小则往返多、过大则超出 EAPOL MTU 被交换机丢弃。
+        this.fragment = Math.max(128, Math.min(1400, f));
     }
 
     /** 一次处理的结果：outgoingTls 为需下发的 TLS 字节；appData 为握手完成后解出的明文（PEAP 内层 EAP）。 */
@@ -113,9 +116,9 @@ public class EapTlsSupport {
                     if (s.clientAuth && !hasPeerCert(engine)) {
                         return new StepResult(null, false, false, true, "no client cert", null);
                     }
-                    return new StepResult(out, out.length > FRAGMENT, true, false, null, null);
+                    return new StepResult(out, out.length > fragment, true, false, null, null);
                 }
-                return new StepResult(out, out.length > FRAGMENT, false, false, null, null);
+                return new StepResult(out, out.length > fragment, false, false, null, null);
             }
             // 3) 握手已完成：返回解出的应用明文（PEAP 内层 EAP）；EAP-TLS 终点由 success 上一轮处理
             return new StepResult(null, false, false, false, null, appData);
@@ -144,19 +147,19 @@ public class EapTlsSupport {
         catch (Exception e) { return false; }
     }
 
-    /** 构造 EAP-TLS 数据字段：flags[+len]+payload，按 FRAGMENT 分片。返回 EAP data（不含 EAP 头）列表。
+    /** 构造 EAP-TLS 数据字段：flags[+len]+payload，按 fragment 分片。返回 EAP data（不含 EAP 头）列表。
      *  RFC 5216：仅首片携带 L 标志与 4 字节【总长度】，后续分片不含长度字段；S 标志置首片，M 标志置非末片。 */
     public byte[][] fragmentForEap(byte[] tls) {
         if (tls == null) tls = new byte[0];
-        if (tls.length <= FRAGMENT) {
+        if (tls.length <= fragment) {
             return new byte[][]{eapTlsData(tls, 0, -1)};
         }
-        int n = (tls.length + FRAGMENT - 1) / FRAGMENT;
+        int n = (tls.length + fragment - 1) / fragment;
         byte[][] out = new byte[n][];
         int total = tls.length;
         for (int i = 0; i < n; i++) {
-            int from = i * FRAGMENT;
-            int len = Math.min(FRAGMENT, tls.length - from);
+            int from = i * fragment;
+            int len = Math.min(fragment, tls.length - from);
             byte[] part = new byte[len];
             System.arraycopy(tls, from, part, 0, len);
             boolean more = i < n - 1;

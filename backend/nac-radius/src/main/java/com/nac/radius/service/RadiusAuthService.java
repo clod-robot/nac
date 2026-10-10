@@ -24,6 +24,7 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * RADIUS 认证（RFC 2865）：支持 PAP 与 CHAP。
@@ -60,6 +61,40 @@ public class RadiusAuthService {
         this.exemptMapper = exemptMapper;
         this.syslogForwarder = syslogForwarder;
         this.eapTlsSupport = eapTlsSupport;
+    }
+
+    /** 用户查询短 TTL 缓存：EAP-TLS 握手有十几次往返，避免每轮都查库（降延迟 + 减 DB 负载）。 */
+    private static final long USER_CACHE_TTL_MS = 15_000;
+    private final ConcurrentHashMap<String, UserHit> userCache = new ConcurrentHashMap<>();
+    private record UserHit(RadiusUser user, long expireAt) {}
+
+    private RadiusUser lookupUser(String username) {
+        long now = System.currentTimeMillis();
+        UserHit hit = userCache.get(username);
+        if (hit != null && now < hit.expireAt()) return hit.user();
+        RadiusUser u = userMapper.selectByUsername(username);
+        if (u != null) userCache.put(username, new UserHit(u, now + USER_CACHE_TTL_MS));
+        return u;
+    }
+
+    /** 免认证终端名单短 TTL 缓存（变化不频繁）。 */
+    private static final long EXEMPT_CACHE_TTL_MS = 30_000;
+    private volatile List<Map<String, String>> exemptCache;
+    private volatile long exemptCacheExpire;
+
+    private List<Map<String, String>> exemptList() {
+        long now = System.currentTimeMillis();
+        List<Map<String, String>> c = exemptCache;
+        if (c != null && now < exemptCacheExpire) return c;
+        try {
+            c = exemptMapper.listEnabled();
+        } catch (Exception e) {
+            log.warn("免认证终端查询失败: {}", e.getMessage());
+            c = java.util.Collections.emptyList();
+        }
+        exemptCache = c;
+        exemptCacheExpire = now + EXEMPT_CACHE_TTL_MS;
+        return c;
     }
 
     /** 处理 Access-Request，返回响应报文（Accept/Reject），异常时返回 Reject。 */
@@ -99,7 +134,7 @@ public class RadiusAuthService {
 
         RadiusUser user;
         try {
-            user = userMapper.selectByUsername(username);
+            user = lookupUser(username);
         } catch (Exception e) {
             log.error("RADIUS 查询用户失败: {}", e.getMessage());
             reject.addString(RadiusCodes.REPLY_MESSAGE, "server error");
@@ -207,7 +242,7 @@ public class RadiusAuthService {
             }
             clearFailures(user.getUsername());
             RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
-            accept.addAttribute(eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
+            putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
             accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
             if (props.getVlanId() > 0) {
                 accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
@@ -317,7 +352,7 @@ public class RadiusAuthService {
     private RadiusPacket tlsAccept(RadiusPacket request, RadiusUser user, String method) {
         clearFailures(user.getUsername());
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
-        accept.addAttribute(eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, request.getIdentifier(), null));
+        putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, request.getIdentifier(), null));
         accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
         if (props.getVlanId() > 0) {
             accept.addInt(RadiusCodes.TUNNEL_TYPE, 13);
@@ -378,10 +413,26 @@ public class RadiusAuthService {
 
     private RadiusPacket tlsChallenge(RadiusPacket request, String sid, byte[] eapReq) {
         RadiusPacket ch = new RadiusPacket(RadiusCodes.ACCESS_CHALLENGE, request.getIdentifier(), null);
-        ch.addAttribute(eapTypeOf(request), eapReq);
+        putEap(ch, eapTypeOf(request), eapReq);
         ch.addAttribute(RadiusCodes.STATE, sid.getBytes(StandardCharsets.UTF_8));
         ch.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
         return ch;
+    }
+
+    /**
+     * 将 EAP 报文按 RFC 3579 拆分为多个 EAP-Message 属性（单属性值 ≤ 253 字节，受 1 字节长度限制），
+     * 使单个 RADIUS 响应可承载最大约 4KB 的 EAP 包，NAS 端按序重组为一个 EAPOL 帧下发。
+     * 相比每片单独往返，可把证书等大载荷的握手往返次数从数十次降到个位数。
+     */
+    static final int EAP_ATTR_MAX = 253;
+    private void putEap(RadiusPacket resp, int attrType, byte[] eap) {
+        if (eap.length <= EAP_ATTR_MAX) { resp.addAttribute(attrType, eap); return; }
+        for (int i = 0; i < eap.length; i += EAP_ATTR_MAX) {
+            int n = Math.min(EAP_ATTR_MAX, eap.length - i);
+            byte[] chunk = new byte[n];
+            System.arraycopy(eap, i, chunk, 0, n);
+            resp.addAttribute(attrType, chunk);
+        }
     }
 
     /** EAP data = type(1) + payload。 */
@@ -429,7 +480,7 @@ public class RadiusAuthService {
     /** 构造带 EAP-Failure 与 Message-Authenticator 的拒绝响应。 */
     private RadiusPacket eapReject(RadiusPacket request, RadiusUser user, String msg, int eapId) {
         RadiusPacket reject = new RadiusPacket(RadiusCodes.ACCESS_REJECT, request.getIdentifier(), null);
-        reject.addAttribute(eapTypeOf(request), eapPacket(RadiusCodes.EAP_FAILURE, eapId, null));
+        putEap(reject, eapTypeOf(request), eapPacket(RadiusCodes.EAP_FAILURE, eapId, null));
         reject.addString(RadiusCodes.REPLY_MESSAGE, msg);
         reject.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
         recordAuth(request, 0, "EAP: " + msg);
@@ -483,7 +534,7 @@ public class RadiusAuthService {
         try {
             String nMac = norm(mac);
             String nIp = ip == null ? "" : ip.trim();
-            for (Map<String, String> t : exemptMapper.listEnabled()) {
+            for (Map<String, String> t : exemptList()) {
                 String tm = t.get("mac"), ti = t.get("ip");
                 if (tm != null && !tm.isBlank() && norm(tm).equals(nMac) && !nMac.isEmpty()) return true;
                 if (ti != null && !ti.isBlank() && ti.trim().equals(nIp) && !nIp.isEmpty()) return true;

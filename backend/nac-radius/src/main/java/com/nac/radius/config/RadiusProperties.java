@@ -34,4 +34,10 @@ public class RadiusProperties {
     private int vlanId = 0;
     /** 802.1X EAP 方法：MD5 / TLS / PEAP，默认 TLS（证书认证） */
     private String eapMethod = "TLS";
+    /**
+     * 单个 EAP-TLS 分片承载的最大 TLS 字节数。越大握手往返越少、认证越快，
+     * 但需 ≤ 交换机 EAPOL 转发能力（建议 600~1400，标准以太 MTU 下安全上限约 1400）。
+     * 默认 1020，兼顾速度与主流交换机兼容性；老旧交换机可下调到 240~512。
+     */
+    private int eapFragmentSize = 1020;
 }
