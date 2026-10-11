@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '../store/user'
+import { getMe } from '../api/auth'
 
 const routes = [
   { path: '/login', component: () => import('../views/Login.vue'), meta: { public: true } },
@@ -33,10 +34,17 @@ const router = createRouter({
 })
 
 // 路由守卫：未登录跳转登录；角色不足拦截（防水平越权前端兜底）
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const store = useUserStore()
   if (to.meta.public) return true
-  if (!store.token) return { path: '/login', query: { redirect: to.fullPath } }
+  // 刷新后内存态丢失：若 HttpOnly cookie 仍有效，通过 /me 恢复身份，实现刷新免登录
+  if (!store.username) {
+    try {
+      const r = await getMe()
+      if (r && r.data && r.data.username) store.setLogin(r.data)
+    } catch (e) { /* 未登录或 cookie 失效，下方跳转登录 */ }
+  }
+  if (!store.username) return { path: '/login', query: { redirect: to.fullPath } }
   if (to.meta.roles && !to.meta.roles.includes(store.role)) {
     return { path: '/dashboard' }
   }

@@ -4,6 +4,7 @@ import request from './request'
 export const getCaptcha = () => request.get('/api/auth/captcha')
 export const login = (data) => request.post('/api/auth/login', data)
 export const logout = () => request.post('/api/auth/logout')
+export const getMe = () => request.get('/api/auth/me')
 
 // 短信
 export const sendSms = (data) => request.post('/api/auth/sms/send', data)

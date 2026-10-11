@@ -38,7 +38,9 @@ public class SshWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession ws) throws Exception {
+        // 优先 query token（兼容），其次从握手 Cookie 取 NAC_TOKEN（HttpOnly 模式主路径）
         String token = queryParam(ws.getUri(), "token");
+        if (token == null) token = cookieToken(ws);
         if (token == null || !jwtUtil.validate(token)) {
             ws.close(CloseStatus.POLICY_VIOLATION.withReason("未登录或登录已过期"));
             return;
@@ -146,6 +148,20 @@ public class SshWebSocketHandler extends TextWebSocketHandler {
         for (String kv : uri.getQuery().split("&")) {
             int i = kv.indexOf('=');
             if (i > 0 && kv.substring(0, i).equals(key)) return kv.substring(i + 1);
+        }
+        return null;
+    }
+
+    /** 从 WebSocket 握手请求的 Cookie 头中读取 NAC_TOKEN */
+    private static String cookieToken(WebSocketSession ws) {
+        String cookie = ws.getHandshakeHeaders().getFirst("Cookie");
+        if (cookie == null) return null;
+        for (String c : cookie.split(";")) {
+            String t = c.trim();
+            if (t.startsWith("NAC_TOKEN=")) {
+                String v = t.substring("NAC_TOKEN=".length());
+                if (!v.isEmpty()) return v;
+            }
         }
         return null;
     }

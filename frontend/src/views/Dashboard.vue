@@ -86,6 +86,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import { getMonitorSnapshot, getMonitorStats, onlineList } from '../api/auth'
+import { useUserStore } from '../store/user'
 
 const online = ref(0)
 const todayAuth = ref(0)
@@ -155,8 +156,7 @@ async function loadOnline() {
 }
 
 function openSSE() {
-  const token = localStorage.getItem('nac_token') || ''
-  const url = `${window.location.origin}/api/auth/monitor/stream?token=${encodeURIComponent(token)}`
+  const url = `${window.location.origin}/api/auth/monitor/stream`
   es = new EventSource(url)
   es.addEventListener('metrics', (ev) => {
     sseOn.value = true

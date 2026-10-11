@@ -63,6 +63,14 @@ import { useUserStore } from '../store/user'
 const router = useRouter()
 const route = useRoute()
 const store = useUserStore()
+
+// 仅允许站内相对路径作为登录后跳转目标，拒绝外域/协议相对 URL，防范开放重定向
+function safeRedirect(target) {
+  if (typeof target !== 'string' || !target) return '/dashboard'
+  if (!target.startsWith('/') || target.startsWith('//') || target.startsWith('/\\')) return '/dashboard'
+  if (/[\\]/.test(target)) return '/dashboard'
+  return target
+}
 const tab = ref('pwd')
 const loading = ref(false)
 const captchaImg = ref('')
@@ -92,7 +100,7 @@ async function onLogin() {
         }
       } catch (e) {}
     }
-    router.replace(route.query.redirect || '/dashboard')
+    router.replace(safeRedirect(route.query.redirect))
   } finally {
     loading.value = false
     loadCaptcha()

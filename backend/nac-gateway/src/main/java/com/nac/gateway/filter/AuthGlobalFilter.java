@@ -112,8 +112,21 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private String resolveToken(ServerHttpRequest request) {
+        // 1) Authorization 头（兼容 API 调试/旧客户端）
         String auth = request.getHeaders().getFirst("Authorization");
         if (auth != null && auth.startsWith("Bearer ")) return auth.substring(7);
+        // 2) HttpOnly Cookie 中的 NAC_TOKEN（浏览器主路径，免疫 XSS 窃取）
+        String cookie = request.getHeaders().getFirst("Cookie");
+        if (cookie != null) {
+            for (String c : cookie.split(";")) {
+                String t = c.trim();
+                if (t.startsWith("NAC_TOKEN=")) {
+                    String v = t.substring("NAC_TOKEN=".length());
+                    if (!v.isEmpty()) return v;
+                }
+            }
+        }
+        // 3) query 参数 token（WebSocket / EventSource 等无法自定义头的场景兜底）
         List<String> q = request.getQueryParams().get("token");
         return q != null && !q.isEmpty() ? q.get(0) : null;
     }

@@ -34,7 +34,7 @@ const termEl = ref(null)
 const connecting = ref(false)
 const connected = ref(false)
 const fontSize = ref(14)
-const conn = reactive({ host: '192.168.10.88', port: 22, username: 'mao', password: '' })
+const conn = reactive({ host: '', port: 22, username: '', password: '' })
 
 let term = null, fit = null, ws = null, ro = null
 
@@ -84,7 +84,7 @@ function connect() {
   disconnect(false)
   connecting.value = true
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  ws = new WebSocket(`${proto}://${location.host}/ws/ssh?token=${encodeURIComponent(store.token)}`)
+  ws = new WebSocket(`${proto}://${location.host}/ws/ssh`)
   ws.onopen = () => {
     connecting.value = false
     ws.send(JSON.stringify({

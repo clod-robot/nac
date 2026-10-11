@@ -1,13 +1,27 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import qs from 'qs'
+import { useUserStore } from '../store/user'
 
-const request = axios.create({ baseURL: '/', timeout: 15000 })
+// 从内存 store 读取 token（pinia 未就绪时降级为空，不抛错）
+function getToken() {
+  try { return useUserStore().token || '' } catch (e) { return '' }
+}
 
-// 请求拦截：携带 token；GET 参数用 qs 序列化
+// 读取非 HttpOnly 的 XSRF-TOKEN cookie，用于 CSRF 双提交校验
+function readCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'))
+  return m ? decodeURIComponent(m[1]) : ''
+}
+
+const request = axios.create({ baseURL: '/', timeout: 15000, withCredentials: true })
+
+// 请求拦截：携带 token；回传 X-XSRF-TOKEN；GET 参数用 qs 序列化
 request.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('nac_token')
+  const token = getToken()
   if (token) cfg.headers.Authorization = 'Bearer ' + token
+  const xsrf = readCookie('XSRF-TOKEN')
+  if (xsrf) cfg.headers['X-XSRF-TOKEN'] = xsrf
   if (cfg.method === 'get') {
     cfg.paramsSerializer = (p) => qs.stringify(p, { arrayFormat: 'repeat' })
   }
@@ -22,7 +36,7 @@ request.interceptors.response.use(
     const d = resp.data
     if (d && d.code === 200) return d
     if (d && d.code === 401) {
-      localStorage.clear()
+      try { useUserStore().logout() } catch (e) {}
       location.href = '/login'
     }
     ElMessage.error((d && d.message) || '请求失败')
