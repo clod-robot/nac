@@ -32,6 +32,10 @@ public interface RedisKeyConstants {
     String ONLINE_SESSION_PREFIX = "nac:online:";
     /** RADIUS 与 NAS 约定的共享密钥（Redis 持久化，可在 NAS 管理页热修改） */
     String RADIUS_SHARED_SECRET = "nac:radius:shared-secret";
+    /** 网关内部签名密钥（网关与各下游服务共享，sys_config 持久化 + Redis 缓存，修改后需重启各服务生效） */
+    String GW_INTERNAL_SECRET = "nac:gw:internal-secret";
+    /** 网关内部签名密钥上一版本（平滑轮换：下游验签同时接受 current+previous，避免切换窗口 403） */
+    String GW_INTERNAL_SECRET_PREV = "nac:gw:internal-secret:prev";
     /** 短信网关配置（provider + 各云凭证，JSON，Redis 持久化，可热修改） */
     String SMS_CONFIG = "nac:sms:config";
     /** 日志外发 syslog 服务器配置（JSON，Redis 持久化，可热修改） */

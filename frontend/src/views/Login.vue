@@ -57,7 +57,7 @@ import { ref, onMounted } from 'vue'
 import { User, Lock, Download } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getCaptcha, login, sendSms, smsLogin } from '../api/auth'
+import { getCaptcha, login, sendSms, smsLogin, getSecretStatus } from '../api/auth'
 import { useUserStore } from '../store/user'
 
 const router = useRouter()
@@ -82,6 +82,16 @@ async function onLogin() {
     const r = await login({ ...form.value, captchaKey: captchaKey.value })
     store.setLogin(r.data)
     ElMessage.success('登录成功')
+    if (store.isAdmin()) {
+      try {
+        const st = await getSecretStatus()
+        if (st.data.isDefault) {
+          ElMessage.warning('网关内部签名密钥仍为出厂默认值，已引导至「系统参数设置」，请立即修改')
+          router.replace('/system-config')
+          return
+        }
+      } catch (e) {}
+    }
     router.replace(route.query.redirect || '/dashboard')
   } finally {
     loading.value = false

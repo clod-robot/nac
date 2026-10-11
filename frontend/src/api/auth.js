@@ -81,6 +81,11 @@ export const exemptDelete = (id) => request.delete(`/api/auth/admin/exempt-termi
 export const getSystemInfo = () => request.get('/api/auth/system/info')
 export const setSystemNtp = (data) => request.put('/api/auth/system/ntp', data)
 
+// 网关内部签名密钥（admin）：状态/随机生成/保存
+export const getSecretStatus = () => request.get('/api/auth/system/secret/status')
+export const generateSecret = () => request.get('/api/auth/system/secret/generate')
+export const saveSecret = (data) => request.put('/api/auth/system/secret', data)
+
 // RADIUS 参数配置（admin）：分片大小 / CA 证书，热生效
 export const getRadiusConfig = () => request.get('/api/radius/config')
 export const setRadiusFragment = (data) => request.put('/api/radius/config/fragment', data)

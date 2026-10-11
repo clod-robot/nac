@@ -1,6 +1,27 @@
 <template>
   <div class="page">
     <el-card class="card" shadow="never">
+      <template #header>
+        <span class="card-title">网关内部签名密钥</span>
+        <el-tag size="small" :type="secret.isDefault ? 'danger' : 'success'" style="margin-left:10px">
+          {{ secret.isDefault ? '出厂默认值（不安全）' : '已自定义' }}
+        </el-tag>
+      </template>
+      <el-alert v-if="secret.isDefault" type="error" :closable="false" show-icon style="margin-bottom:12px"
+        title="当前仍为出厂默认密钥，存在签名伪造/重放风险，请立即修改。" />
+      <el-form label-width="130px">
+        <el-form-item label="新密钥">
+          <el-input v-model="secretInput" placeholder="点击右侧生成，或自行输入至少 16 位" show-password style="max-width:420px" />
+          <el-button style="margin-left:8px" @click="onGenSecret">🎲 生成高强度密钥</el-button>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="savingSecret" @click="onSaveSecret">保存</el-button>
+          <span class="tip">用于网关与各服务间 HMAC 签名校验（防绕过网关直连、防重放）。保存后约 30 秒内自动生效，无需重启，各服务共享同一密钥。</span>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card class="card" shadow="never">
       <template #header><span class="card-title">NTP 服务器</span></template>
       <el-form label-width="110px">
         <el-form-item label="当前服务器">
@@ -84,7 +105,11 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getSystemInfo, setSystemNtp, getRadiusConfig, setRadiusFragment, uploadRadiusCa, downloadRadiusCa } from '../api/auth'
+import { getSystemInfo, setSystemNtp, getRadiusConfig, setRadiusFragment, uploadRadiusCa, downloadRadiusCa, getSecretStatus, generateSecret, saveSecret } from '../api/auth'
+
+const secret = reactive({ isDefault: true })
+const secretInput = ref('')
+const savingSecret = ref(false)
 
 const ntp = ref('-')
 const tz = ref('-')
@@ -102,6 +127,10 @@ const uploading = ref(false)
 
 async function loadAll() {
   try {
+    const s = await getSecretStatus()
+    secret.isDefault = !!s.data.isDefault
+  } catch (e) {}
+  try {
     const s = await getSystemInfo()
     ntp.value = s.data.ntpServer || '-'
     tz.value = s.data.timeZone || '-'
@@ -114,6 +143,29 @@ async function loadAll() {
     fragInput.value = f.current
     Object.assign(ca, r.data.ca)
   } catch (e) {}
+}
+
+async function onGenSecret() {
+  try {
+    const r = await generateSecret()
+    secretInput.value = r.data.secret
+    ElMessage.success('已生成 32 位高强度密钥，点击保存生效')
+  } catch (e) {
+    ElMessage.error('生成失败：' + (e?.response?.data?.message || e.message))
+  }
+}
+
+async function onSaveSecret() {
+  if (!secretInput.value) { ElMessage.warning('请先生成或输入密钥'); return }
+  savingSecret.value = true
+  try {
+    await saveSecret({ secret: secretInput.value })
+    ElMessage.success('密钥已保存，约 30 秒内自动生效，无需重启')
+    secret.isDefault = false
+    secretInput.value = ''
+  } catch (e) {
+    ElMessage.error('保存失败：' + (e?.response?.data?.message || e.message))
+  } finally { savingSecret.value = false }
 }
 
 async function saveNtp() {
