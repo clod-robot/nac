@@ -82,18 +82,27 @@ public class SshWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         SSHClient ssh = new SSHClient();
-        ssh.addHostKeyVerifier(new PromiscuousVerifier());
-        ssh.setConnectTimeout(8000);
-        ssh.setTimeout(0);
-        ssh.connect(host, port);
-        ssh.authPassword(username, password);
-        var session = ssh.startSession();
-        session.allocatePTY("xterm", cols, rows, cols * 8, rows * 16, new HashMap<>());
-        var shell = session.startShell();
-        OutputStream stdin = shell.getOutputStream();
-        InputStream stdout = shell.getInputStream();
-
-        SshHolder holder = new SshHolder(ssh, stdin);
+        SshHolder holder;
+        InputStream stdout;
+        try {
+            ssh.addHostKeyVerifier(new PromiscuousVerifier());
+            ssh.setConnectTimeout(8000);
+            ssh.setTimeout(0);
+            ssh.connect(host, port);
+            ssh.authPassword(username, password);
+            var session = ssh.startSession();
+            session.allocatePTY("xterm", cols, rows, cols * 8, rows * 16, new HashMap<>());
+            var shell = session.startShell();
+            OutputStream stdin = shell.getOutputStream();
+            stdout = shell.getInputStream();
+            holder = new SshHolder(ssh, stdin);
+        } catch (Exception e) {
+            // 连接/认证/起 shell 任一环节失败：holder 尚未入表，cleanup 无从触发，必须主动释放 socket
+            try { ssh.disconnect(); } catch (Exception ignore) {}
+            send(ws, "\033[31mSSH 连接失败: " + e.getMessage() + "\033[0m\r\n");
+            closeQuietly(ws);
+            return;
+        }
         holders.put(ws.getId(), holder);
         send(ws, "\033[32mSSH 已连接 " + username + "@" + host + "\033[0m\r\n");
 

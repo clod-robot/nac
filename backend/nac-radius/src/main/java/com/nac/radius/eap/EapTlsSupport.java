@@ -18,7 +18,9 @@ import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -36,11 +38,19 @@ public class EapTlsSupport {
     private final CertManager certManager;
     private final com.nac.radius.service.RadiusConfigService configService;
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
-    private final ExecutorService taskExecutor = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "radius-tls-task");
-        t.setDaemon(true);
-        return t;
-    });
+    /**
+     * SSLEngine 委派任务执行池：固定大小 + 有界队列 + CallerRunsPolicy。
+     * 严禁使用无界缓存线程池——并发握手高峰会无界创建线程直至 OOM。
+     */
+    private final ExecutorService taskExecutor = new ThreadPoolExecutor(
+            4, 8, 60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(1024),
+            r -> {
+                Thread t = new Thread(r, "radius-tls-task");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.CallerRunsPolicy());
     /** 会话表后台淘汰：未完成握手/无后续报文的会话按 TTL 清理，防止内存无界增长。 */
     private final ScheduledExecutorService sweeper = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "radius-tls-sweep");
@@ -51,14 +61,20 @@ public class EapTlsSupport {
     @PostConstruct
     void startSweeper() {
         sweeper.scheduleAtFixedRate(() -> {
-            long now = System.currentTimeMillis();
-            int removed = 0;
-            Iterator<java.util.Map.Entry<String, Session>> it = sessions.entrySet().iterator();
-            while (it.hasNext()) {
-                java.util.Map.Entry<String, Session> e = it.next();
-                if (now - e.getValue().lastSeen > SESSION_TTL_MS) { it.remove(); removed++; }
+            // 必须吞掉所有异常：ScheduledExecutorService 中任务抛异常会导致后续执行全部被抑制，
+            // 一旦停摆会话淘汰失效、内存泄漏复现，故此处任何异常仅记录不抛出。
+            try {
+                long now = System.currentTimeMillis();
+                int removed = 0;
+                Iterator<java.util.Map.Entry<String, Session>> it = sessions.entrySet().iterator();
+                while (it.hasNext()) {
+                    java.util.Map.Entry<String, Session> e = it.next();
+                    if (now - e.getValue().lastSeen > SESSION_TTL_MS) { it.remove(); removed++; }
+                }
+                if (removed > 0) log.info("EAP-TLS 淘汰过期会话 {} 个, 剩余 {}", removed, sessions.size());
+            } catch (Throwable t) {
+                log.warn("EAP-TLS 会话淘汰异常: {}", t.toString());
             }
-            if (removed > 0) log.info("EAP-TLS 淘汰过期会话 {} 个, 剩余 {}", removed, sessions.size());
         }, 30, 30, TimeUnit.SECONDS);
     }
 

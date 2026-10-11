@@ -65,6 +65,8 @@ public class RadiusAuthService {
 
     /** 用户查询短 TTL 缓存：EAP-TLS 握手有十几次往返，避免每轮都查库（降延迟 + 减 DB 负载）。 */
     private static final long USER_CACHE_TTL_MS = 15_000;
+    /** 缓存容量上限：超限先淘汰已过期项，仍超限则清空，防止随用户增长单调累积（慢泄漏）。 */
+    private static final int USER_CACHE_MAX = 5000;
     private final ConcurrentHashMap<String, UserHit> userCache = new ConcurrentHashMap<>();
     private record UserHit(RadiusUser user, long expireAt) {}
 
@@ -73,7 +75,14 @@ public class RadiusAuthService {
         UserHit hit = userCache.get(username);
         if (hit != null && now < hit.expireAt()) return hit.user();
         RadiusUser u = userMapper.selectByUsername(username);
-        if (u != null) userCache.put(username, new UserHit(u, now + USER_CACHE_TTL_MS));
+        if (u != null) {
+            if (userCache.size() >= USER_CACHE_MAX) {
+                long t = now;
+                userCache.entrySet().removeIf(e -> e.getValue().expireAt() <= t);
+                if (userCache.size() >= USER_CACHE_MAX) userCache.clear();
+            }
+            userCache.put(username, new UserHit(u, now + USER_CACHE_TTL_MS));
+        }
         return u;
     }
 
