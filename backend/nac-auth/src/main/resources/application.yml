@@ -66,4 +66,7 @@ nac:
 
 logging:
   level:
-    com.nac: INFO
+    root: WARN
+    com.nac: WARN          # 业务日志：仅 WARN/ERROR 输出到 journald；排障时临时改 INFO/DEBUG，重启生效
+    org.springframework: WARN
+    com.alibaba.druid: WARN

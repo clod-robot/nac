@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 全异步日志：队列 8K、永不阻塞，避免日志 I/O 拖垮业务线程（高并发消峰） -->
+<!--
+  全异步日志：队列 8K、永不阻塞，避免日志 I/O 拖垮业务线程（高并发消峰）。
+  日志级别默认硬编码为 WARN（仅 WARN/ERROR 输出到控制台/journald，显著降低运行日志体积）。
+  级别在此硬编码而非用 ${} 占位，避免属性未解析时 root 回落 DEBUG 导致日志暴涨。
+  如需临时调高级别排障，可在对应服务 application.yml 配置 logging.level.* 覆盖（Spring Boot 启动后生效）。
+  注意：审计留痕（认证/计费/操作日志）写入数据库，与本日志级别无关，不受影响。
+-->
 <configuration>
     <springProperty name="APP" source="spring.application.name" defaultValue="nac-app"/>
 
@@ -17,11 +23,11 @@
         <appender-ref ref="CONSOLE"/>
     </appender>
 
-    <logger name="com.nac" level="INFO"/>
+    <logger name="com.nac" level="WARN"/>
     <logger name="org.springframework" level="WARN"/>
     <logger name="com.alibaba.druid" level="WARN"/>
 
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="ASYNC"/>
     </root>
 </configuration>
