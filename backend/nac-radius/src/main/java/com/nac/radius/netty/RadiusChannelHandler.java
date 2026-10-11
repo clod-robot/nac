@@ -62,6 +62,13 @@ public class RadiusChannelHandler extends SimpleChannelInboundHandler<DatagramPa
             return;
         }
 
+        // 计费端口必须校验 Accounting-Request 认证符（RFC 2866），防伪造计费/污染在线会话
+        if (!authPort && request.getCode() == RadiusCodes.ACCOUNTING_REQUEST
+                && !RadiusCodec.verifyAccountingAuthenticator(data, secretService.getSharedSecret())) {
+            log.warn("丢弃计费报文：Request Authenticator 校验失败 from={}", msg.sender());
+            return;
+        }
+
         // 重活异步化：业务线程池处理，IO 线程立即回收以承接后续报文
         try {
             bizExecutor.execute(() -> handleAndReply(ctx, msg, request));

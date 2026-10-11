@@ -97,6 +97,19 @@ public final class RadiusCodec {
         }
     }
 
+    /**
+     * 校验 Accounting-Request 的 Request Authenticator（RFC 2866 §3）：
+     * MD5(Code + ID + Length + 16×0 + Attributes + Secret) 必须等于报文中的认证符。
+     * 不通过说明报文被伪造或共享密钥不一致，应丢弃，防止计费/在线会话被任意源污染。
+     */
+    public static boolean verifyAccountingAuthenticator(byte[] packet, String sharedSecret) {
+        if (packet == null || packet.length < RadiusCodes.HEADER_LEN) return false;
+        byte[] copy = packet.clone();
+        Arrays.fill(copy, 4, 20, (byte) 0); // 认证符字段置零参与计算
+        byte[] expect = md5(concat(copy, sharedSecret.getBytes(StandardCharsets.UTF_8)));
+        return MessageDigest.isEqual(expect, Arrays.copyOfRange(packet, 4, 20));
+    }
+
     /** 定位长度为 18 的 Message-Authenticator(80) 属性值起始偏移，不存在返回 -1。 */
     private static int findMessageAuthenticator(byte[] packet) {
         int off = RadiusCodes.HEADER_LEN;

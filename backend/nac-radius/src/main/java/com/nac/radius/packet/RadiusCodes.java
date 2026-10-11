@@ -19,6 +19,7 @@ public final class RadiusCodes {
     public static final int USER_NAME = 1;
     public static final int USER_PASSWORD = 2;
     public static final int CHAP_PASSWORD = 3;
+    public static final int CHAP_CHALLENGE = 60; // CHAP 独立挑战（缺省时用请求认证符）
     public static final int NAS_IP_ADDRESS = 4;
     public static final int NAS_PORT = 5;
     public static final int FRAMED_IP_ADDRESS = 8;

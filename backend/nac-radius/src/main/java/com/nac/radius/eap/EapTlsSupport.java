@@ -11,9 +11,14 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.util.Base64;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -25,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 public class EapTlsSupport {
 
     private static final long SESSION_TTL_MS = 60_000;
+    /** EAP-TLS 单会话入站重组缓冲上限，防对端持续发分片导致内存膨胀。 */
+    private static final int MAX_REASSEMBLY_BYTES = 64 * 1024;
 
     private final CertManager certManager;
     private final com.nac.radius.service.RadiusConfigService configService;
@@ -34,6 +41,32 @@ public class EapTlsSupport {
         t.setDaemon(true);
         return t;
     });
+    /** 会话表后台淘汰：未完成握手/无后续报文的会话按 TTL 清理，防止内存无界增长。 */
+    private final ScheduledExecutorService sweeper = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "radius-tls-sweep");
+        t.setDaemon(true);
+        return t;
+    });
+
+    @PostConstruct
+    void startSweeper() {
+        sweeper.scheduleAtFixedRate(() -> {
+            long now = System.currentTimeMillis();
+            int removed = 0;
+            Iterator<java.util.Map.Entry<String, Session>> it = sessions.entrySet().iterator();
+            while (it.hasNext()) {
+                java.util.Map.Entry<String, Session> e = it.next();
+                if (now - e.getValue().lastSeen > SESSION_TTL_MS) { it.remove(); removed++; }
+            }
+            if (removed > 0) log.info("EAP-TLS 淘汰过期会话 {} 个, 剩余 {}", removed, sessions.size());
+        }, 30, 30, TimeUnit.SECONDS);
+    }
+
+    @PreDestroy
+    void stopSweeper() {
+        sweeper.shutdownNow();
+        taskExecutor.shutdownNow();
+    }
 
     public EapTlsSupport(CertManager certManager, com.nac.radius.service.RadiusConfigService configService) {
         this.certManager = certManager;
@@ -199,13 +232,23 @@ public class EapTlsSupport {
         if (eapData == null || eapData.length < 1) return null;
         int flags = eapData[0] & 0xFF;
         int off = 1;
-        if ((flags & 0x80) != 0) off += 4; // 跳过 L 长度字段
+        int declaredLen = -1;
+        if ((flags & 0x80) != 0) { // L 标志：读取声明的 TLS 总长度并校验，防声明超大/不符
+            if (eapData.length < 5) return null;
+            declaredLen = ((eapData[1] & 0xFF) << 24) | ((eapData[2] & 0xFF) << 16)
+                    | ((eapData[3] & 0xFF) << 8) | (eapData[4] & 0xFF);
+            if (declaredLen > MAX_REASSEMBLY_BYTES) { s.inBuf.reset(); return null; }
+            off += 4;
+        }
         if (eapData.length > off) {
             byte[] frag = new byte[eapData.length - off];
             System.arraycopy(eapData, off, frag, 0, frag.length);
+            if (s.inBuf.size() + frag.length > MAX_REASSEMBLY_BYTES) { s.inBuf.reset(); return null; }
             s.inBuf.writeBytes(frag);
         }
         if ((flags & 0x40) != 0) return null; // 还有分片
+        // 末片：若声明了总长度，必须与实际累积一致，否则视为非法丢弃
+        if (declaredLen >= 0 && s.inBuf.size() != declaredLen) { s.inBuf.reset(); return null; }
         byte[] full = s.inBuf.toByteArray();
         s.inBuf.reset();
         return full;

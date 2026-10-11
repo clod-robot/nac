@@ -29,6 +29,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class RadiusServer {
 
+    /** 出厂默认共享密钥（与 RadiusProperties/application.yml 默认一致），用于启动期弱配置检测。 */
+    private static final String DEFAULT_SECRET = "NacRadius@2026";
+
     private final RadiusProperties props;
     private final RadiusAuthService authService;
     private final RadiusAcctService acctService;
@@ -66,6 +69,11 @@ public class RadiusServer {
             acctChannel = bind(props.getAcctPort(), false);
             log.info("RADIUS 服务已启动: auth=udp/{} acct=udp/{} workers={} bizThreads={} bizQueue={}",
                     props.getAuthPort(), props.getAcctPort(), threads, bizThreads, queueCap);
+            // 安全加固：若生效密钥仍为出厂默认，强烈告警（RADIUS 共享密钥是防伪造的根基）
+            String effective = secretService.getSharedSecret();
+            if (DEFAULT_SECRET.equals(effective)) {
+                log.error("【安全告警】RADIUS 共享密钥仍为出厂默认值(NacRadius@2026)，存在被伪造风险，请立即通过配置/环境变量 RADIUS_SHARED_SECRET 修改！");
+            }
         } catch (Exception e) {
             log.error("RADIUS 服务启动失败，关闭事件循环组", e);
             stop();

@@ -100,6 +100,7 @@ public class PortalV2Service {
     }
 
     private PortalPacket onChallenge(PortalPacket req) {
+        evictExpiredChallenges();
         byte[] challenge = new byte[16];
         RANDOM.nextBytes(challenge);
         challenges.put(req.getSerialNo(), new Challenge(challenge, req.getReqId(), System.currentTimeMillis()));
@@ -110,6 +111,12 @@ public class PortalV2Service {
         // CHAP 报文需带 ChapAuth：MD5(ReqId + 密钥 + Challenge)
         ack.setChapAuth(chapAuth(ack.getReqId(), sharedSecret(), challenge));
         return ack;
+    }
+
+    /** 淘汰过期挑战，避免长期残留占用内存（serialNo 有界，此处做惰性清理）。 */
+    private void evictExpiredChallenges() {
+        long now = System.currentTimeMillis();
+        challenges.entrySet().removeIf(e -> now - e.getValue().ts() > CHALLENGE_TTL_MS);
     }
 
     private PortalPacket onAuth(PortalPacket req, InetSocketAddress sender) {

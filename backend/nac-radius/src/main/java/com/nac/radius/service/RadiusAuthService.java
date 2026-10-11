@@ -392,7 +392,13 @@ public class RadiusAuthService {
             // 内层 MD5 响应校验
             int vlen = innerEap[5] & 0xFF;
             byte[] resp = Arrays.copyOfRange(innerEap, 6, 6 + vlen);
-            byte[] pw = user.getPasswordHash().getBytes(StandardCharsets.UTF_8);
+            // PEAP 内层 EAP-MD5 需可逆明文（与 EAP-MD5 一致），用 BCrypt 哈希串会必然失败
+            String plain = resolvePlainPassword(user);
+            if (plain == null) {
+                eapTlsSupport.remove(sid);
+                return eapReject(request, user, "no reversible password", id);
+            }
+            byte[] pw = plain.getBytes(StandardCharsets.UTF_8);
             byte[] buf = new byte[1 + pw.length + 16];
             buf[0] = (byte) iId;
             System.arraycopy(pw, 0, buf, 1, pw.length);
@@ -556,7 +562,10 @@ public class RadiusAuthService {
         if (chapPwd != null) {
             // CHAP 必须可逆明文；无则不可校验
             if (plain == null) return false;
-            return RadiusCodec.verifyChap(chapPwd, plain, request.getRequestAuthenticator());
+            // 挑战优先取属性 60(CHAP-Challenge)，缺失时回退请求认证符（RFC 2865 默认）
+            byte[] chapChallenge = request.getAttr(RadiusCodes.CHAP_CHALLENGE);
+            byte[] challenge = chapChallenge != null ? chapChallenge : request.getRequestAuthenticator();
+            return RadiusCodec.verifyChap(chapPwd, plain, challenge);
         }
         if (papEnc != null) {
             String got = RadiusCodec.decryptPapPassword(papEnc, request.getRequestAuthenticator(), secretService.getSharedSecret());
