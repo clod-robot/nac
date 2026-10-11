@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -76,19 +77,25 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         } catch (Exception e) {
             return unauthorized(exchange, "Token 无效");
         }
-        Boolean exists = redisTemplate.hasKey(RedisKeyConstants.TOKEN_PREFIX + userId);
-        if (!Boolean.TRUE.equals(exists)) {
-            return unauthorized(exchange, "登录已失效，请重新登录");
-        }
-        // 滑动续期
-        redisTemplate.expire(RedisKeyConstants.TOKEN_PREFIX + userId, Duration.ofSeconds(jwtUtil.getExpireSeconds()));
-
-        ServerHttpRequest mutated = cleanHeaders(request).mutate()
-                .header("X-User-Id", userId)
-                .header("X-User-Name", jwtUtil.getUsername(token))
-                .header("X-User-Role", jwtUtil.getRole(token))
-                .build();
-        return chain.filter(exchange.mutate().request(mutated).build());
+        final String uid = userId;
+        final long expireSec = jwtUtil.getExpireSeconds();
+        // Redis 是阻塞 IO，绝不能在 Netty 事件环上执行——切到 boundedElastic 线程池，
+        // 否则并发一高事件环被占满，整个网关吞吐塌陷、请求大面积超时。
+        return Mono.fromCallable(() -> {
+            String key = RedisKeyConstants.TOKEN_PREFIX + uid;
+            if (!Boolean.TRUE.equals(redisTemplate.hasKey(key))) return null;
+            redisTemplate.expire(key, Duration.ofSeconds(expireSec));
+            return uid;
+        }).subscribeOn(Schedulers.boundedElastic())
+        .flatMap(id -> {
+            if (id == null) return unauthorized(exchange, "登录已失效，请重新登录");
+            ServerHttpRequest mutated = cleanHeaders(request).mutate()
+                    .header("X-User-Id", id)
+                    .header("X-User-Name", jwtUtil.getUsername(token))
+                    .header("X-User-Role", jwtUtil.getRole(token))
+                    .build();
+            return chain.filter(exchange.mutate().request(mutated).build());
+        });
     }
 
     private ServerHttpRequest cleanHeaders(ServerHttpRequest request) {

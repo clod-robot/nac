@@ -15,9 +15,9 @@ public class HmacUtil {
 
     private static final String ALG = "HmacSHA256";
 
-    /** 签名：sign(secret, ts, method, path) → 小写 hex */
-    public String sign(String secret, String ts, String method, String path) {
-        String payload = ts + "\n" + method + "\n" + path;
+    /** 签名：sign(secret, ts, method, path, nonce) → 小写 hex；nonce 参与签名防重放 */
+    public String sign(String secret, String ts, String method, String path, String nonce) {
+        String payload = ts + "\n" + method + "\n" + path + "\n" + (nonce == null ? "" : nonce);
         try {
             Mac mac = Mac.getInstance(ALG);
             mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), ALG));
@@ -28,10 +28,14 @@ public class HmacUtil {
         }
     }
 
-    /** 验签：恒定时间比较，防时序攻击 */
-    public boolean verify(String secret, String ts, String method, String path, String sign) {
+    /** 兼容旧调用：无 nonce */
+    public String sign(String secret, String ts, String method, String path) {
+        return sign(secret, ts, method, path, "");
+    }
+
+    /** 验签（含 nonce）：恒定时间比较，防时序攻击；时间窗 ±300s */
+    public boolean verify(String secret, String ts, String method, String path, String nonce, String sign) {
         if (sign == null || ts == null) return false;
-        // 时间窗 ±300s
         long tsLong;
         try {
             tsLong = Long.parseLong(ts);
@@ -41,7 +45,11 @@ public class HmacUtil {
         if (Math.abs(System.currentTimeMillis() / 1000 - tsLong) > 300) {
             return false;
         }
-        return constantTimeEquals(sign(secret, ts, method, path), sign);
+        return constantTimeEquals(sign(secret, ts, method, path, nonce), sign);
+    }
+
+    public boolean verify(String secret, String ts, String method, String path, String sign) {
+        return verify(secret, ts, method, path, "", sign);
     }
 
     private boolean constantTimeEquals(String a, String b) {

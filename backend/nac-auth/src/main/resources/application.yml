@@ -19,10 +19,22 @@ spring:
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
     type: com.alibaba.druid.pool.DruidDataSource
+    # 连接池显式配置：避免默认 maxActive=8 偏小与坏连接流入业务
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 5000
+      test-while-idle: true
+      test-on-borrow: false
+      validation-query: SELECT 1
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
+      timeout: 3000ms
   kafka:
     bootstrap-servers: ${KAFKA_SERVERS:127.0.0.1:9093}
     producer:

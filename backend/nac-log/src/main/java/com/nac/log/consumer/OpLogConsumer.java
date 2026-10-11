@@ -32,31 +32,44 @@ public class OpLogConsumer {
     }
 
     @KafkaListener(topics = "nac-op-log", groupId = "nac-log")
-    public void onMessage(String payload) {
+    public void onMessage(String payload) throws Exception {
+        SysLog sl;
         try {
-            Map<?, ?> event = MAPPER.readValue(payload, Map.class);
-            SysLog sl = new SysLog();
-            sl.setOperator(str(event.get("operator")));
-            sl.setOperatorId(toLong(event.get("operatorId")));
-            sl.setRole(str(event.get("role")));
-            sl.setIp(str(event.get("ip")));
-            sl.setMethod(truncate(str(event.get("method")), 128));
-            sl.setOperation(truncate(str(event.get("operation")), 255));
-            sl.setParams(event.get("params") == null ? null : truncate(MAPPER.writeValueAsString(event.get("params")), 60000));
-            sl.setStatus(truncate(str(event.get("status")), 32));
-            sl.setCostMs(toInt(event.get("costMs")));
-            Object t = event.get("time");
-            if (t instanceof Number n) {
-                sl.setCreateTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(n.longValue()), ZoneId.systemDefault()));
-            } else {
-                sl.setCreateTime(LocalDateTime.now());
-            }
-            sysLogMapper.insert(sl);
-            // 外发到 syslog 服务器（静默降级，不影响落库）
-            syslogForwarder.forwardOpLog(formatOp(sl));
+            sl = parse(payload);
         } catch (Exception e) {
-            log.warn("操作日志消费失败: {}", e.getMessage());
+            // 解析失败 = 毒消息：丢弃并告警，避免反复重试阻塞整个日志消费流
+            log.warn("操作日志解析失败，已丢弃该消息: {}", e.getMessage());
+            return;
         }
+        // 落库失败向上抛出，交由 Spring Kafka 的重试/恢复机制处理，
+        // 防止审计日志在 DB 抖动时被静默吞掉（合规要求日志不可丢）。
+        sysLogMapper.insert(sl);
+        // 外发 syslog 静默降级，不影响落库主流程
+        try {
+            syslogForwarder.forwardOpLog(formatOp(sl));
+        } catch (Exception ignore) {
+        }
+    }
+
+    private SysLog parse(String payload) throws Exception {
+        Map<?, ?> event = MAPPER.readValue(payload, Map.class);
+        SysLog sl = new SysLog();
+        sl.setOperator(str(event.get("operator")));
+        sl.setOperatorId(toLong(event.get("operatorId")));
+        sl.setRole(str(event.get("role")));
+        sl.setIp(str(event.get("ip")));
+        sl.setMethod(truncate(str(event.get("method")), 128));
+        sl.setOperation(truncate(str(event.get("operation")), 255));
+        sl.setParams(event.get("params") == null ? null : truncate(MAPPER.writeValueAsString(event.get("params")), 60000));
+        sl.setStatus(truncate(str(event.get("status")), 32));
+        sl.setCostMs(toInt(event.get("costMs")));
+        Object t = event.get("time");
+        if (t instanceof Number n) {
+            sl.setCreateTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(n.longValue()), ZoneId.systemDefault()));
+        } else {
+            sl.setCreateTime(LocalDateTime.now());
+        }
+        return sl;
     }
 
     private static String str(Object o) {

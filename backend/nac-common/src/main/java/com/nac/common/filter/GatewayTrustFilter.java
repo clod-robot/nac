@@ -4,6 +4,7 @@ import com.nac.common.security.HmacUtil;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -11,8 +12,10 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.io.IOException;
+import java.time.Duration;
 
 /**
  * 网关信任过滤器：校验请求是否来自网关（HMAC 签名 + 时间窗 ±300s）。
@@ -30,6 +33,9 @@ public class GatewayTrustFilter {
     private boolean trustEnabled;
 
     private final HmacUtil hmacUtil;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
     public GatewayTrustFilter(HmacUtil hmacUtil) {
         this.hmacUtil = hmacUtil;
@@ -55,12 +61,24 @@ public class GatewayTrustFilter {
                     return;
                 }
                 String ts = req.getHeader("X-Gateway-Ts");
+                String nonce = req.getHeader("X-Gateway-Nonce");
                 String sign = req.getHeader("X-Gateway-Sign");
-                if (!hmacUtil.verify(internalSecret, ts, req.getMethod(), req.getRequestURI(), sign)) {
+                if (!hmacUtil.verify(internalSecret, ts, req.getMethod(), req.getRequestURI(), nonce, sign)) {
                     resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
                     resp.setContentType("application/json;charset=UTF-8");
                     resp.getWriter().write("{\"code\":403,\"message\":\"禁止直连服务端口，请通过网关访问\"}");
                     return;
+                }
+                // 重放防护：同一 ts+nonce 在时间窗内只能出现一次（Redis 原子去重）
+                if (nonce != null) {
+                    Boolean first = redisTemplate.opsForValue()
+                            .setIfAbsent("gw:nonce:" + ts + ":" + nonce, "1", Duration.ofSeconds(310));
+                    if (!Boolean.TRUE.equals(first)) {
+                        resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        resp.setContentType("application/json;charset=UTF-8");
+                        resp.getWriter().write("{\"code\":403,\"message\":\"重复请求\"}");
+                        return;
+                    }
                 }
                 chain.doFilter(request, response);
             }

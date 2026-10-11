@@ -8,6 +8,7 @@ spring:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
+      timeout: 3000ms
   cloud:
     # Nacos 服务发现：网关与各业务服务均注册到 Nacos，路由用 lb:// 按服务名转发
     nacos:
@@ -16,6 +17,10 @@ spring:
         namespace: ${NACOS_NAMESPACE:public}
     # Spring Cloud Gateway (WebFlux) 路由
     gateway:
+      # 下游超时：防止某服务 hang 住时网关连接/线程被无限占用，拖垮整个入口
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 15s
       routes:
         - id: nac-auth
           uri: lb://nac-auth
