@@ -22,12 +22,22 @@
     <!-- NAS 设备列表 -->
     <el-card style="margin-top: 14px">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
           <span>已认证的 NAS 设备</span>
-          <el-button size="small" :icon="Refresh" @click="loadList" :loading="loading">刷新</el-button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <el-input
+              v-model="ipKeyword" :prefix-icon="Search" clearable size="small"
+              placeholder="搜索 NAS IP" style="width: 170px" />
+            <el-select v-model="onlineFilter" size="small" style="width: 120px">
+              <el-option label="全部状态" value="all" />
+              <el-option label="在线" value="online" />
+              <el-option label="离线" value="offline" />
+            </el-select>
+            <el-button size="small" :icon="Refresh" @click="loadList" :loading="loading">刷新</el-button>
+          </div>
         </div>
       </template>
-      <el-table :data="list" v-loading="loading" empty-text="暂无 NAS 设备发起认证" stripe>
+      <el-table :data="filteredList" v-loading="loading" empty-text="暂无 NAS 设备发起认证" stripe>
         <el-table-column prop="nasIp" label="NAS IP" width="150" />
         <el-table-column label="在线" width="90" align="center">
           <template #default="{ row }">
@@ -71,8 +81,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { ref, computed, onMounted } from 'vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getNasSecret, setNasSecret, listNas, renameNas } from '../api/auth'
 import { fmtTime } from '../utils/format'
@@ -87,6 +97,19 @@ const saving = ref(false)
 
 const list = ref([])
 const loading = ref(false)
+
+// 列表筛选：IP 关键字 + 在线/离线状态
+const ipKeyword = ref('')
+const onlineFilter = ref('all')
+const filteredList = computed(() => {
+  const kw = ipKeyword.value.trim().toLowerCase()
+  return list.value.filter(row => {
+    if (kw && !String(row.nasIp || '').toLowerCase().includes(kw)) return false
+    if (onlineFilter.value === 'online' && !row.online) return false
+    if (onlineFilter.value === 'offline' && row.online) return false
+    return true
+  })
+})
 
 const renameVisible = ref(false)
 const cur = ref(null)

@@ -21,4 +21,16 @@
         ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), remark = VALUES(remark)
     </insert>
 
+    <!-- 批量 upsert：单条 SQL 写入多键，减少库往返 -->
+    <insert id="batchUpsert">
+        INSERT INTO sys_portal_config (config_key, config_value, remark)
+        VALUES
+        <foreach collection="list" item="it" separator=",">
+            (#{it.configKey}, #{it.configValue}, #{it.remark})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            config_value = VALUES(config_value),
+            remark       = VALUES(remark)
+    </insert>
+
 </mapper>

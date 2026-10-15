@@ -48,6 +48,12 @@ public class PortalController {
         private String password;
         private String mac;
         private String ip;
+        /** Portal URL 参数（按「协议配置」的参数名映射解析）：NAS/AC 设备 IP */
+        private String nasIp;
+        /** Portal URL 参数：无线 SSID */
+        private String ssid;
+        /** Portal URL 参数：NAS/AC 设备名称 */
+        private String nasName;
         private String ts;
         private String sign;
     }
@@ -65,12 +71,14 @@ public class PortalController {
             if (req.getUsername() == null || req.getUsername().isBlank() || req.getPassword() == null) {
                 throw new BusinessException(400, "账号和密码不能为空");
             }
-            return Result.success(portalService.authAccount(req.getUsername(), req.getPassword(), req.getMac(), ip));
+            return Result.success(portalService.authAccount(req.getUsername(), req.getPassword(), req.getMac(), ip,
+                    req.getNasIp(), req.getSsid(), req.getNasName()));
         }
         if (req.getPhone() == null || req.getPhone().isBlank() || req.getCode() == null || req.getCode().isBlank()) {
             throw new BusinessException(400, "手机号和验证码不能为空");
         }
-        return Result.success(portalService.auth(req.getPhone(), req.getCode(), req.getMac(), ip));
+        return Result.success(portalService.auth(req.getPhone(), req.getCode(), req.getMac(), ip,
+                req.getNasIp(), req.getSsid(), req.getNasName()));
     }
 
     /** 防伪推验签（Portal 页加载时调用）：返回签名是否合法。 */

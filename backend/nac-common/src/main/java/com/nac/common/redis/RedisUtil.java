@@ -117,4 +117,15 @@ public class RedisUtil {
             return 0;
         }
     }
+
+    /** 持久化自增（无过期），用于配置发布版本号（引擎据此热加载）。 */
+    public long increment(String key) {
+        try {
+            Long v = redisTemplate.opsForValue().increment(key);
+            return v == null ? 0 : v;
+        } catch (Exception e) {
+            log.warn("Redis increment 失败: {}", key, e);
+            return 0;
+        }
+    }
 }

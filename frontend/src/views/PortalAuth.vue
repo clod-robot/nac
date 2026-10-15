@@ -46,7 +46,7 @@
       <template v-else>
         <el-result icon="success" title="认证成功" sub-title="您已通过准入认证，可以访问网络">
           <template #extra>
-            <div class="info">IP：{{ ip }}　MAC：{{ form.mac || '-' }}</div>
+            <div class="info">IP：{{ form.ip || '-' }}　MAC：{{ form.mac || '-' }}</div>
             <el-button type="primary" @click="$router.push('/dashboard')">进入系统</el-button>
           </template>
         </el-result>
@@ -77,8 +77,8 @@ const captchaKey = ref('')
 const done = ref(false)
 const blocked = ref(false)
 const cd = ref(0)
-const ip = ref('')
-const form = ref({ phone: '', captchaCode: '', code: '', username: '', password: '', mac: '', ts: '', sign: '' })
+const form = ref({ phone: '', captchaCode: '', code: '', username: '', password: '',
+  mac: '', ip: '', nasIp: '', ssid: '', nasName: '', ts: '', sign: '' })
 const activeAuth = ref('sms')
 const authType = computed(() => cfg.value.portalAuthType || 'sms')
 const showSms = computed(() => authType.value !== 'account' && (authType.value !== 'both' || activeAuth.value === 'sms'))
@@ -100,7 +100,8 @@ async function onAuth() {
     let payload
     if (activeAuth.value === 'account') {
       payload = { type: 'account', username: form.value.username, password: form.value.password,
-        mac: form.value.mac, ts: form.value.ts, sign: form.value.sign }
+        mac: form.value.mac, ip: form.value.ip, nasIp: form.value.nasIp, ssid: form.value.ssid, nasName: form.value.nasName,
+        ts: form.value.ts, sign: form.value.sign }
     } else {
       payload = { ...form.value }
     }
@@ -111,16 +112,35 @@ async function onAuth() {
     loading.value = false
   }
 }
+// 按「协议配置」的参数名（支持逗号分隔别名）从 URL query 取值，取第一个命中的
+function pick(q, names) {
+  if (!names) return ''
+  for (const n of String(names).split(',')) {
+    const key = n.trim()
+    if (key && q[key] != null && String(q[key]) !== '') return String(q[key])
+  }
+  return ''
+}
+// 该字段是否启用采集：无开关键或非 'false' 即视为启用（兼容旧配置）
+const isOn = (k) => String(cfg.value[k + 'Enabled'] ?? 'true') !== 'false'
+// 仅当字段已启用时才采集对应 URL 参数
+function pickIfOn(q, k) {
+  return isOn(k) ? pick(q, cfg.value[k]) : ''
+}
 onMounted(async () => {
-  // 取重定向 URL 里的防伪参数（ts/mac/sign）
-  const q = route.query
-  form.value.ts = q.ts ? String(q.ts) : ''
-  form.value.sign = q.sign ? String(q.sign) : ''
-  if (q.mac) form.value.mac = String(q.mac)
+  // 先加载 Portal 配置（含 URL 参数名映射与采集开关），再解析重定向 URL 参数
   try {
     const r = await portalConfig()
     cfg.value = r.data || {}
   } catch (e) {}
+  const q = route.query
+  form.value.ts = q.ts ? String(q.ts) : ''
+  form.value.sign = q.sign ? String(q.sign) : ''
+  form.value.mac = pickIfOn(q, 'urlParamUserMac') || (q.mac ? String(q.mac) : '')
+  form.value.ip = pickIfOn(q, 'urlParamUserIp')
+  form.value.nasIp = pickIfOn(q, 'urlParamNasIp')
+  form.value.ssid = pickIfOn(q, 'urlParamSsid')
+  form.value.nasName = pickIfOn(q, 'urlParamNasName')
   // 防伪推：开启后必须验签通过，否则拦截
   if (String(cfg.value.antiForgeryEnabled) === 'true') {
     try {

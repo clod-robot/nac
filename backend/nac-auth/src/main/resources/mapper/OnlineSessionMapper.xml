@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nac.auth.mapper.OnlineSessionMapper">
+
+    <!-- Portal 网页认证写入在线会话：同一终端(会话ID=MAC)重复认证时幂等覆盖 -->
+    <insert id="upsert" parameterType="com.nac.auth.entity.OnlineSession">
+        INSERT INTO sys_online_session (acct_session_id, username, username_mask, mac, nas_ip, framed_ip, ssid, nas_name, status, start_time)
+        VALUES (#{acctSessionId}, #{username}, #{usernameMask}, #{mac}, #{nasIp}, #{framedIp}, #{ssid}, #{nasName}, 1, IFNULL(#{startTime}, NOW()))
+        ON DUPLICATE KEY UPDATE
+            username      = COALESCE(VALUES(username), username),
+            username_mask = COALESCE(VALUES(username_mask), username_mask),
+            mac           = COALESCE(VALUES(mac), mac),
+            nas_ip        = COALESCE(VALUES(nas_ip), nas_ip),
+            framed_ip     = COALESCE(VALUES(framed_ip), framed_ip),
+            ssid          = COALESCE(VALUES(ssid), ssid),
+            nas_name      = COALESCE(VALUES(nas_name), nas_name),
+            status        = 1
+    </insert>
+
+</mapper>

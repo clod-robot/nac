@@ -15,8 +15,14 @@
       <el-table-column prop="acctSessionId" label="会话ID" min-width="160" show-overflow-tooltip />
       <el-table-column prop="username" label="用户" width="120" show-overflow-tooltip />
       <el-table-column prop="mac" label="MAC" width="150" />
-      <el-table-column prop="nasIp" label="NAS IP" width="130" />
+      <el-table-column label="NAS IP / 名称" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">
+          <div>{{ row.nasIp || '-' }}</div>
+          <div v-if="row.nasName" class="sub">{{ row.nasName }}</div>
+        </template>
+      </el-table-column>
       <el-table-column prop="framedIp" label="终端IP" width="130" />
+      <el-table-column prop="ssid" label="SSID" width="120" show-overflow-tooltip />
       <el-table-column prop="vlanId" label="VLAN" width="70" />
       <el-table-column label="上线时间" width="150">
         <template #default="{ row }">{{ fmt(row.startTime) }}</template>
@@ -94,5 +100,6 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 .filters { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .bar .t { font-weight: 600; }
 .tip { color: #909399; font-size: 12px; flex: 1; }
+.sub { color: #909399; font-size: 12px; }
 .pg { margin-top: 12px; display: flex; justify-content: flex-end; }
 </style>

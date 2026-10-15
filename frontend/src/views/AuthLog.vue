@@ -37,8 +37,10 @@
         <template #default="{ row }">
           <div>{{ row.ip || '-' }}</div>
           <div v-if="row.nasIp" class="sub">{{ row.nasIp }}</div>
+          <div v-if="row.nasName" class="sub">{{ row.nasName }}</div>
         </template>
       </el-table-column>
+      <el-table-column prop="ssid" label="SSID" width="110" show-overflow-tooltip />
       <el-table-column label="结果" width="80">
         <template #default="{ row }">
           <el-tag size="small" :type="row.result === 1 ? 'success' : 'danger'">

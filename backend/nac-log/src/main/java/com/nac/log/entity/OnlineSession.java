@@ -14,6 +14,10 @@ public class OnlineSession {
     private String nasIp;
     private String framedIp;
     private Integer vlanId;
+    /** 无线 SSID（来自 Portal URL 参数） */
+    private String ssid;
+    /** NAS/AC 设备名称（来自 Portal URL 参数） */
+    private String nasName;
     private Integer status;
     private LocalDateTime startTime;
     private LocalDateTime updateTime;

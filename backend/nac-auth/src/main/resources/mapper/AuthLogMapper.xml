@@ -3,8 +3,8 @@
 <mapper namespace="com.nac.auth.mapper.AuthLogMapper">
 
     <insert id="insert" parameterType="com.nac.auth.entity.AuthLog" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO sys_auth_log (auth_type, username, phone, mac, ip, nas_ip, result, message, create_time)
-        VALUES (#{authType}, #{username}, #{phone}, #{mac}, #{ip}, #{nasIp}, #{result}, #{message}, NOW())
+        INSERT INTO sys_auth_log (auth_type, username, phone, mac, ip, nas_ip, ssid, nas_name, result, message, create_time)
+        VALUES (#{authType}, #{username}, #{phone}, #{mac}, #{ip}, #{nasIp}, #{ssid}, #{nasName}, #{result}, #{message}, NOW())
     </insert>
 
 </mapper>

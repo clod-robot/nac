@@ -14,7 +14,10 @@
             <el-form-item>
               <div class="cap-row">
                 <el-input v-model="form.captchaCode" placeholder="图形验证码" />
-                <img v-if="captchaImg" :src="captchaImg" class="cap-img" @click="loadCaptcha" title="点击刷新" />
+                <div class="cap-box" @click="loadCaptcha" title="点击刷新">
+                  <img v-if="captchaImg" :src="captchaImg" class="cap-img" />
+                  <div v-if="capExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
+                </div>
               </div>
             </el-form-item>
             <el-button type="primary" :loading="loading" style="width:100%" @click="onLogin">登 录</el-button>
@@ -28,7 +31,10 @@
             <el-form-item>
               <div class="cap-row">
                 <el-input v-model="sms.captchaCode" placeholder="图形验证码" />
-                <img v-if="captchaImg" :src="captchaImg" class="cap-img" @click="loadCaptcha" />
+                <div class="cap-box" @click="loadCaptcha" title="点击刷新">
+                  <img v-if="captchaImg" :src="captchaImg" class="cap-img" />
+                  <div v-if="capExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
+                </div>
               </div>
             </el-form-item>
             <el-form-item>
@@ -53,7 +59,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { User, Lock, Download } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -79,16 +85,35 @@ const form = ref({ username: '', password: '', captchaCode: '' })
 const sms = ref({ phone: '', captchaCode: '', code: '' })
 const cd = ref(0)
 
+const capExpired = ref(false)
+// 与后端 Redis 验证码 TTL(300s) 一致：到期后图片加灰色遮罩提醒过期，点击刷新
+const CAPTCHA_TTL_MS = 5 * 60 * 1000
+let capLoadedAt = 0
+let capTimer = null
+
 async function loadCaptcha() {
   const r = await getCaptcha()
   captchaKey.value = r.data.captchaKey
   captchaImg.value = r.data.captchaImg
+  capExpired.value = false
+  capLoadedAt = Date.now()
+  if (capTimer) clearInterval(capTimer)
+  capTimer = setInterval(() => {
+    if (Date.now() - capLoadedAt >= CAPTCHA_TTL_MS) {
+      capExpired.value = true
+      clearInterval(capTimer)
+      capTimer = null
+    }
+  }, 1000)
 }
+onBeforeUnmount(() => { if (capTimer) clearInterval(capTimer) })
 async function onLogin() {
   loading.value = true
+  let ok = false
   try {
     const r = await login({ ...form.value, captchaKey: captchaKey.value })
     store.setLogin(r.data)
+    ok = true
     ElMessage.success('登录成功')
     if (store.isAdmin()) {
       try {
@@ -103,7 +128,8 @@ async function onLogin() {
     router.replace(safeRedirect(route.query.redirect))
   } finally {
     loading.value = false
-    loadCaptcha()
+    // 仅登录失败时刷新验证码：成功后立即跳转，无需再发一次验证码请求
+    if (!ok) loadCaptcha()
   }
 }
 async function onSendSms() {
@@ -132,7 +158,11 @@ onMounted(loadCaptcha)
 .title { font-size: 18px; font-weight: 600; text-align: center; }
 .cap-row { display: flex; gap: 8px; width: 100%; align-items: center; }
 .cap-row .el-input { flex: 1; min-width: 0; }
-.cap-img { height: 40px; cursor: pointer; border: 1px solid #dcdfe6; border-radius: 4px; flex-shrink: 0; }
+/* 按图片原始高度 1:1 显示，避免浏览器下采样把字符渲染发虚（灰蒙蒙） */
+.cap-box { position: relative; flex-shrink: 0; cursor: pointer; border: 1px solid #dcdfe6; border-radius: 4px; overflow: hidden; line-height: 0; }
+.cap-img { height: 48px; display: block; }
+/* 过期遮罩：5 分钟未提交登录，后端验证码已过期，灰蒙蒙提示点击刷新 */
+.cap-mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); color: #fff; font-size: 12px; line-height: 1.5; display: flex; align-items: center; justify-content: center; text-align: center; }
 .tip { margin-top: 12px; color: #909399; font-size: 12px; text-align: center; }
 .dl-row { margin-top: 10px; text-align: center; font-size: 12px; }
 .dl-tip { color: #909399; margin-left: 6px; }

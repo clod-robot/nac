@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS sys_online_session (
     nas_ip        VARCHAR(64)           DEFAULT NULL,
     framed_ip     VARCHAR(64)           DEFAULT NULL,
     vlan_id       INT                   DEFAULT NULL,
+    ssid          VARCHAR(32)           DEFAULT NULL COMMENT '无线SSID(Portal URL参数)',
+    nas_name      VARCHAR(64)           DEFAULT NULL COMMENT 'NAS/AC设备名(Portal URL参数)',
     status        TINYINT      NOT NULL DEFAULT 1,
     start_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -133,6 +135,8 @@ CREATE TABLE IF NOT EXISTS sys_auth_log (
     mac         VARCHAR(32)           DEFAULT NULL COMMENT '终端MAC',
     ip          VARCHAR(64)           DEFAULT NULL COMMENT '客户端IP',
     nas_ip      VARCHAR(64)           DEFAULT NULL COMMENT 'NAS设备IP',
+    ssid        VARCHAR(32)           DEFAULT NULL COMMENT '无线SSID(Portal URL参数)',
+    nas_name    VARCHAR(64)           DEFAULT NULL COMMENT 'NAS/AC设备名(Portal URL参数)',
     result      TINYINT      NOT NULL COMMENT '1成功 0失败',
     message     VARCHAR(255)          DEFAULT NULL COMMENT '结果说明',
     create_time DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -236,4 +240,40 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'portalAuth
 INSERT INTO sys_portal_config (config_key, config_value, remark)
 SELECT 'buttonText', '登录', '认证按钮文字'
 WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'buttonText');
+
+-- Portal 协议配置：URL 参数名映射（对应设备侧 url-parameter；多别名用逗号分隔，取首个命中）
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamUserIp', 'wlanuserip,userip,uaddress', '终端IP参数名(如华为wlanuserip/H3C source-address)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamUserIp');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamUserMac', 'wlanusermac,mac,usermac,umac', '终端MAC参数名'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamUserMac');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamNasIp', 'wlanacip,nasip,acip,gw_address', 'NAS/AC设备IP参数名'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamNasIp');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamSsid', 'ssid,wlanacssid', '无线SSID参数名'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamSsid');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamNasName', 'wlanacname,acname,nasname,gw_id', 'NAS/AC设备名称参数名'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamNasName');
+
+-- URL 参数采集开关（false=停用该字段采集，但其参数名配置保留，可随时恢复）
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamUserIpEnabled', 'true', '终端IP参数采集开关(true/false)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamUserIpEnabled');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamUserMacEnabled', 'true', '终端MAC参数采集开关(true/false)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamUserMacEnabled');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamNasIpEnabled', 'true', 'NAS/AC设备IP参数采集开关(true/false)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamNasIpEnabled');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamSsidEnabled', 'true', '无线SSID参数采集开关(true/false)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamSsidEnabled');
+INSERT INTO sys_portal_config (config_key, config_value, remark)
+SELECT 'urlParamNasNameEnabled', 'true', 'NAS/AC设备名称参数采集开关(true/false)'
+WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key = 'urlParamNasNameEnabled');
+
+
 
