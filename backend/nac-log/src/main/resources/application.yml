@@ -29,6 +29,7 @@ spring:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:hipXkCn4on2Yr8QgPyBT8TEGNUnN_a3_}
       timeout: 3000ms
   kafka:
     bootstrap-servers: ${KAFKA_SERVERS:127.0.0.1:9093}
