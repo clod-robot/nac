@@ -18,4 +18,14 @@ public interface SmsGateway {
      * @return 是否受理成功
      */
     boolean send(String phone, String signName, String templateCode, Map<String, String> params) throws Exception;
+
+    /**
+     * 发送短信并返回「实际生效的验证码」。
+     * 默认实现：沿用传入的 code（本地生成），成功返回该 code，失败返回 null。
+     * 阿里云「短信认证服务」由云端生成验证码，网关覆写本方法返回云端下发码。
+     */
+    default String sendAndGetCode(String phone, String signName, String templateCode, Map<String, String> params) throws Exception {
+        boolean ok = send(phone, signName, templateCode, params);
+        return ok ? (params == null ? null : params.get("code")) : null;
+    }
 }

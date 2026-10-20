@@ -14,10 +14,24 @@ public class SmsConfig {
 
     @Data
     public static class Aliyun {
+        /** 服务类型：code=短信验证码（需签名/模板）；auth=短信认证服务（无需签名/模板） */
+        private String mode = "code";
         private String accessKeyId;
         private String accessKeySecret;
+        /** 短信验证码（code）：自申请短信签名 */
         private String signName;
+        /** 短信验证码（code）：自申请模板 Code */
         private String templateCode;
+        /** 短信认证服务（auth）：系统赠送签名，留空则用服务端默认（恒创联众） */
+        private String authSignName;
+        /** 短信认证服务（auth）：系统赠送模板 Code，留空则用服务端默认（100001） */
+        private String authTemplateCode;
+        /** 短信认证服务：认证方案名称（可选） */
+        private String schemeName;
+        /** 短信认证服务：验证码位数（默认 6） */
+        private Long codeLength;
+        /** 短信认证服务：验证码有效期（秒，默认 300） */
+        private Long validTime;
     }
 
     @Data

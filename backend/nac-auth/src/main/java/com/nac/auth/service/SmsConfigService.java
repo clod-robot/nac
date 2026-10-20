@@ -32,6 +32,7 @@ public class SmsConfigService {
     @Value("${nac.sms.provider:mock}") private String defProvider;
     @Value("${nac.sms.aliyun.access-key-id:}") private String defAliAk;
     @Value("${nac.sms.aliyun.access-key-secret:}") private String defAliSk;
+    @Value("${nac.sms.aliyun.mode:code}") private String defAliMode;
     @Value("${nac.sms.aliyun.sign-name:NAC准入}") private String defAliSign;
     @Value("${nac.sms.aliyun.template-code:}") private String defAliTpl;
     @Value("${nac.sms.tencent.secret-id:}") private String defTcId;
@@ -68,6 +69,7 @@ public class SmsConfigService {
         if (c.getCustom() == null) c.setCustom(new SmsConfig.Custom());
 
         SmsConfig.Aliyun a = c.getAliyun();
+        if (a.getMode() == null || a.getMode().isBlank()) a.setMode(defAliMode);
         a.setAccessKeyId(nz(a.getAccessKeyId(), defAliAk));
         a.setAccessKeySecret(nz(a.getAccessKeySecret(), defAliSk));
         a.setSignName(nz(a.getSignName(), defAliSign));

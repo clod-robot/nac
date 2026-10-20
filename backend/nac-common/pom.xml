@@ -26,6 +26,9 @@
         <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
         <dependency><groupId>com.fasterxml.jackson.datatype</groupId><artifactId>jackson-datatype-jsr310</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-aop</artifactId></dependency>
+        <!-- Redis 客户端：Spring Boot 默认 Lettuce（异步、连接池、集群支持更好）。
+             Redis 8 + requirepass 场景下需在配置中显式声明 username（见 application.yml 的 redis.username），
+             否则 Lettuce 6.x 的 RESP3 握手会发送不带 AUTH 的 HELLO 而被 Redis 拒绝(NOAUTH)。 -->
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-validation</artifactId></dependency>
         <dependency><groupId>org.springframework.kafka</groupId><artifactId>spring-kafka</artifactId></dependency>

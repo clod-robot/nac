@@ -34,6 +34,9 @@ spring:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
+      # 必须同时声明用户名：Lettuce 6.x 的 RESP3 握手仅在存在 username 时才会在 HELLO 中携带 AUTH，
+      # 只配 password 会发送裸 HELLO 3 被 Redis 拒绝(NOAUTH)。Redis 6+ 默认用户名为 default。
+      username: ${REDIS_USERNAME:default}
       password: ${REDIS_PASSWORD:hipXkCn4on2Yr8QgPyBT8TEGNUnN_a3_}
       timeout: 3000ms
   kafka:

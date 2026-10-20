@@ -102,17 +102,19 @@ public class SmsService {
             throw new BusinessException(ResultCode.SMS_DAILY_LIMIT);
         }
         String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1_000_000));
-        boolean ok = false;
+        String effectiveCode = null;
         String failReason = null;
         SmsGateway gateway = gatewayFactory.get(configService.get().getProvider());
         try {
-            ok = gateway.send(phone, null, null, Map.of("code", code));
+            // 短信认证服务由云端生成验证码，返回实际生效的 code；其余网关返回本地生成的 code
+            effectiveCode = gateway.sendAndGetCode(phone, null, null, Map.of("code", code));
         } catch (Exception e) {
             failReason = e.getMessage();
             log.warn("短信网关发送失败 gateway={} phoneBlind={} err={}", gateway.name(), blind, e.getMessage());
         }
+        boolean ok = effectiveCode != null;
         if (ok) {
-            redisUtil.set(RedisKeyConstants.SMS_CODE_PREFIX + blind, code, codeTtl);
+            redisUtil.set(RedisKeyConstants.SMS_CODE_PREFIX + blind, effectiveCode, codeTtl);
             redisUtil.set(RedisKeyConstants.SMS_COOLDOWN_PREFIX + blind, "1", cooldown);
             redisUtil.incr(dailyKey, 86400);
         }
