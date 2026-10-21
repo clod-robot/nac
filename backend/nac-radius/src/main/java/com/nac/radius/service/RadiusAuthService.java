@@ -524,13 +524,18 @@ public class RadiusAuthService {
         }
     }
 
-    /** NAS-IP-Address 为 4 字节属性，转点分十进制；解析失败回退原字符串。 */
+    /** NAS-IP-Address 为 4 字节属性，转点分十进制；缺该属性时回退报文源 IP（不少交换机/AP 不填 NAS-IP-Address） */
     private String nasIpOf(RadiusPacket request) {
         byte[] ip = request.getAttr(RadiusCodes.NAS_IP_ADDRESS);
         if (ip != null && ip.length == 4) {
             return (ip[0] & 0xff) + "." + (ip[1] & 0xff) + "." + (ip[2] & 0xff) + "." + (ip[3] & 0xff);
         }
-        return request.getString(RadiusCodes.NAS_IP_ADDRESS);
+        String attr = request.getString(RadiusCodes.NAS_IP_ADDRESS);
+        if (attr != null && !attr.isBlank()) return attr;
+        if (request.getSender() != null && request.getSender().getAddress() != null) {
+            return request.getSender().getAddress().getHostAddress();
+        }
+        return null;
     }
 
     /** Framed-IP-Address 为 4 字节属性，转点分十进制。 */
