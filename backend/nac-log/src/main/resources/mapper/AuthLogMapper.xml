@@ -111,4 +111,40 @@
         ORDER BY value DESC
     </select>
 
+    <!-- 安全事件溯源导出：日志 LEFT JOIN sys_user 取责任人
+         sys_auth_log.phone 存的是 maskPhone 后的脱敏串（如 138****1234），
+         sys_user.phone_blind 与之同算法，可直接等值 JOIN -->
+    <select id="selectForExport" resultType="map">
+        SELECT l.id              AS id,
+               l.auth_type       AS authType,
+               l.username        AS username,
+               l.phone           AS phone,
+               l.mac             AS mac,
+               l.ip              AS ip,
+               l.nas_ip          AS nasIp,
+               l.ssid            AS ssid,
+               l.nas_name        AS nasName,
+               l.result          AS result,
+               l.message         AS message,
+               l.create_time     AS createTime,
+               u.real_name       AS respName,
+               u.username        AS respUsername,
+               u.dept            AS respDept
+        FROM sys_auth_log l
+        LEFT JOIN sys_user u
+               ON (l.username IS NOT NULL AND l.username &lt;&gt; '' AND u.username = l.username)
+                OR (l.phone IS NOT NULL AND l.phone &lt;&gt; '' AND u.phone_blind = l.phone)
+        <where>
+            <if test="authType != null and authType != ''">AND l.auth_type = #{authType}</if>
+            <if test="result != null">AND l.result = #{result}</if>
+            <if test="username != null and username != ''">AND (l.username LIKE CONCAT('%',#{username},'%') OR l.phone LIKE CONCAT('%',#{username},'%'))</if>
+            <if test="mac != null and mac != ''">AND l.mac LIKE CONCAT('%',#{mac},'%')</if>
+            <if test="ip != null and ip != ''">AND l.ip LIKE CONCAT('%',#{ip},'%')</if>
+            <if test="startTime != null and startTime != ''">AND l.create_time &gt;= #{startTime}</if>
+            <if test="endTime != null and endTime != ''">AND l.create_time &lt;= #{endTime}</if>
+        </where>
+        ORDER BY l.id DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

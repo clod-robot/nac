@@ -13,8 +13,13 @@ import com.nac.log.mapper.AuthLogMapper;
 import com.nac.log.mapper.OnlineSessionMapper;
 import com.nac.log.mapper.SysLogMapper;
 import com.nac.log.mapper.SysUserBriefMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -176,6 +181,74 @@ public class LogController {
         data.put("found", user != null);
         data.put("user", user);
         return Result.success(data);
+    }
+
+    /**
+     * 安全事件溯源 - 导出 CSV（公安电子证据留存）
+     * 复用 auth-list 的筛选条件，LEFT JOIN sys_user 附带责任人姓名/部门，
+     * UTF-8 带 BOM，Excel 直接打开不乱码；单次最多 50000 行。
+     */
+    @GetMapping("/trace/export")
+    @RequireRole("admin")
+    @OperationLog("导出安全事件溯源 CSV")
+    public void exportTrace(@RequestParam(required = false) String type,
+                            @RequestParam(required = false) Integer result,
+                            @RequestParam(required = false) String username,
+                            @RequestParam(required = false) String mac,
+                            @RequestParam(required = false) String ip,
+                            @RequestParam(required = false) String startTime,
+                            @RequestParam(required = false) String endTime,
+                            HttpServletResponse response) throws IOException {
+        String st = trim(startTime);
+        String et = trim(endTime);
+        if (et != null && et.length() == 16) et = et + ":59";
+        if (st != null && st.length() == 16) st = st + ":00";
+        List<Map<String, Object>> rows = authLogMapper.selectForExport(
+                trim(type), result, trim(username), trim(mac), trim(ip), st, et, 50000);
+
+        String filename = "SecurityTrace_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".csv";
+        response.setContentType("text/csv; charset=UTF-8");
+        response.setHeader("Content-Disposition",
+                "attachment; filename=\"" + URLEncoder.encode(filename, StandardCharsets.UTF_8) + "\"");
+        PrintWriter w = response.getWriter();
+        // UTF-8 BOM：让 Excel 直接识别为 UTF-8，中文表头/内容不乱码
+        w.write(0xFEFF);
+        w.println("序号,时间,认证类型,账号,手机号,MAC,终端IP,NAS IP,NAS 名称,SSID,结果,说明,责任人姓名,责任人账号,责任人部门");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        int idx = 1;
+        for (Map<String, Object> r : rows) {
+            Object ct = r.get("createTime");
+            String timeStr = (ct instanceof LocalDateTime) ? ((LocalDateTime) ct).format(fmt) : String.valueOf(ct == null ? "" : ct);
+            Integer res = r.get("result") instanceof Number ? ((Number) r.get("result")).intValue() : null;
+            StringBuilder sb = new StringBuilder();
+            sb.append(idx++);
+            sb.append(',').append(csv(timeStr));
+            sb.append(',').append(csv(str(r.get("authType"))));
+            sb.append(',').append(csv(str(r.get("username"))));
+            sb.append(',').append(csv(str(r.get("phone"))));
+            sb.append(',').append(csv(str(r.get("mac"))));
+            sb.append(',').append(csv(str(r.get("ip"))));
+            sb.append(',').append(csv(str(r.get("nasIp"))));
+            sb.append(',').append(csv(str(r.get("nasName"))));
+            sb.append(',').append(csv(str(r.get("ssid"))));
+            sb.append(',').append(res == null ? "" : (res == 1 ? "成功" : "失败"));
+            sb.append(',').append(csv(str(r.get("message"))));
+            sb.append(',').append(csv(str(r.get("respName"))));
+            sb.append(',').append(csv(str(r.get("respUsername"))));
+            sb.append(',').append(csv(str(r.get("respDept"))));
+            w.println(sb);
+        }
+        w.flush();
+    }
+
+    private static String str(Object o) { return o == null ? "" : String.valueOf(o); }
+    /** CSV 字段转义：含逗号/引号/换行时用双引号包裹，内嵌双引号双写 */
+    private static String csv(String s) {
+        if (s == null || s.isEmpty()) return "";
+        if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0) {
+            return '"' + s.replace("\"", "\"\"") + '"';
+        }
+        return s;
     }
 
     /** 强制下线（删除在线会话记录） */

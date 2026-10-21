@@ -38,4 +38,10 @@ public interface AuthLogMapper {
 
     /** 认证类型分布（按 auth_type 分组统计成功/失败） */
     List<Map<String, Object>> statAuthTypeDist(@Param("startTime") String startTime, @Param("endTime") String endTime);
+
+    /** 安全事件溯源导出：按筛选条件返回日志 + 关联责任人（sys_user），单条记录一行 */
+    List<Map<String, Object>> selectForExport(@Param("authType") String authType, @Param("result") Integer result,
+                                              @Param("username") String username, @Param("mac") String mac, @Param("ip") String ip,
+                                              @Param("startTime") String startTime, @Param("endTime") String endTime,
+                                              @Param("limit") int limit);
 }

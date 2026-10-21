@@ -22,6 +22,7 @@
         <el-input v-model="f.ip" placeholder="IP" clearable style="width:130px" @keyup.enter="reloadAll" />
         <el-button :icon="Search" type="primary" @click="reloadAll">查询</el-button>
         <el-button :icon="Refresh" @click="reset">重置</el-button>
+        <el-button :icon="Download" type="warning" :loading="exporting" @click="onExport">导出 CSV</el-button>
       </div>
     </div>
 
@@ -129,8 +130,9 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
-import { Refresh, Search } from '@element-plus/icons-vue'
-import { authLogList, traceStats, traceUser } from '../api/auth'
+import { Refresh, Search, Download } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { authLogList, traceStats, traceUser, traceExport } from '../api/auth'
 import { fmtTime } from '../utils/format'
 
 const range = ref(null)
@@ -139,6 +141,7 @@ const f = ref({ type: '', result: null, username: '', mac: '', ip: '' })
 const list = ref([]); const total = ref(0); const page = ref(1); const size = ref(20)
 const listLoading = ref(false)
 const statLoading = ref(false)
+const exporting = ref(false)
 
 const drawer = ref(false)
 const cur = ref(null)
@@ -277,6 +280,39 @@ function reset() {
   reloadAll()
 }
 function onPage(p) { page.value = p; loadList() }
+
+/** 导出当前筛选条件下的完整日志为 CSV（公安电子证据留存，含责任人） */
+async function onExport() {
+  exporting.value = true
+  try {
+    const params = { ...timeParams() }
+    if (f.value.type) params.type = f.value.type
+    if (f.value.result !== null && f.value.result !== '') params.result = f.value.result
+    if (f.value.username) params.username = f.value.username
+    if (f.value.mac) params.mac = f.value.mac
+    if (f.value.ip) params.ip = f.value.ip
+    const r = await traceExport(params)
+    const blob = new Blob([r.data], { type: 'text/csv;charset=UTF-8' })
+    // 优先取后端 Content-Disposition 中的文件名，兜底用本地时间戳
+    const cd = r.headers && (r.headers['content-disposition'] || r.headers['Content-Disposition'])
+    let fname = 'SecurityTrace_' + new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + '.csv'
+    if (cd) {
+      const m = /filename\*?=(?:UTF-8'')?"?([^";]+)/i.exec(cd)
+      if (m) fname = decodeURIComponent(m[1])
+    }
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fname
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success('已导出 ' + fname)
+  } catch (e) {
+    ElMessage.error('导出失败：' + (e.message || '未知错误'))
+  } finally { exporting.value = false }
+}
 function resize() {
   [trendInst, typeInst, ssidInst, topUserInst, topMacInst, topNasInst].forEach(i => i && i.resize())
 }

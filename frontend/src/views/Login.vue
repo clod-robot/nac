@@ -2,7 +2,7 @@
   <div class="login-wrap">
     <el-card class="login-card">
       <template #header><div class="title">NAC 准入控制系统</div></template>
-      <el-tabs v-model="tab">
+      <el-tabs v-model="tab" @tab-change="onTabChange">
         <el-tab-pane label="账号登录" name="pwd">
           <el-form :model="form" label-width="0" @keyup.enter="onLogin">
             <el-form-item>
@@ -14,9 +14,9 @@
             <el-form-item>
               <div class="cap-row">
                 <el-input v-model="form.captchaCode" placeholder="图形验证码" />
-                <div class="cap-box" @click="loadCaptcha" title="点击刷新">
-                  <img v-if="captchaImg" :src="captchaImg" class="cap-img" />
-                  <div v-if="capExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
+                <div class="cap-box" @click="loadPwdCaptcha" title="点击刷新">
+                  <img v-if="pwdCaptchaImg" :src="pwdCaptchaImg" class="cap-img" />
+                  <div v-if="pwdCapExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
                 </div>
               </div>
             </el-form-item>
@@ -31,9 +31,9 @@
             <el-form-item>
               <div class="cap-row">
                 <el-input v-model="sms.captchaCode" placeholder="图形验证码" />
-                <div class="cap-box" @click="loadCaptcha" title="点击刷新">
-                  <img v-if="captchaImg" :src="captchaImg" class="cap-img" />
-                  <div v-if="capExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
+                <div class="cap-box" @click="loadSmsCaptcha" title="点击刷新">
+                  <img v-if="smsCaptchaImg" :src="smsCaptchaImg" class="cap-img" />
+                  <div v-if="smsCapExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
                 </div>
               </div>
             </el-form-item>
@@ -79,39 +79,75 @@ function safeRedirect(target) {
 }
 const tab = ref('pwd')
 const loading = ref(false)
-const captchaImg = ref('')
-const captchaKey = ref('')
 const form = ref({ username: '', password: '', captchaCode: '' })
 const sms = ref({ phone: '', captchaCode: '', code: '' })
 const cd = ref(0)
 
-const capExpired = ref(false)
 // 与后端 Redis 验证码 TTL(300s) 一致：到期后图片加灰色遮罩提醒过期，点击刷新
 const CAPTCHA_TTL_MS = 5 * 60 * 1000
-let capLoadedAt = 0
-let capTimer = null
 
-async function loadCaptcha() {
+// 账号登录 Tab 独立验证码状态（切换 Tab 时强制刷新，不复用旧 key）
+const pwdCaptchaImg = ref('')
+const pwdCaptchaKey = ref('')
+const pwdCapExpired = ref(false)
+let pwdCapLoadedAt = 0
+let pwdCapTimer = null
+
+// 短信登录 Tab 独立验证码状态
+const smsCaptchaImg = ref('')
+const smsCaptchaKey = ref('')
+const smsCapExpired = ref(false)
+let smsCapLoadedAt = 0
+let smsCapTimer = null
+
+function clearTimer(which) {
+  if (which === 'pwd' && pwdCapTimer) { clearInterval(pwdCapTimer); pwdCapTimer = null }
+  if (which === 'sms' && smsCapTimer) { clearInterval(smsCapTimer); smsCapTimer = null }
+}
+
+async function loadPwdCaptcha() {
   const r = await getCaptcha()
-  captchaKey.value = r.data.captchaKey
-  captchaImg.value = r.data.captchaImg
-  capExpired.value = false
-  capLoadedAt = Date.now()
-  if (capTimer) clearInterval(capTimer)
-  capTimer = setInterval(() => {
-    if (Date.now() - capLoadedAt >= CAPTCHA_TTL_MS) {
-      capExpired.value = true
-      clearInterval(capTimer)
-      capTimer = null
+  pwdCaptchaKey.value = r.data.captchaKey
+  pwdCaptchaImg.value = r.data.captchaImg
+  pwdCapExpired.value = false
+  pwdCapLoadedAt = Date.now()
+  clearTimer('pwd')
+  pwdCapTimer = setInterval(() => {
+    if (Date.now() - pwdCapLoadedAt >= CAPTCHA_TTL_MS) {
+      pwdCapExpired.value = true
+      clearTimer('pwd')
     }
   }, 1000)
 }
-onBeforeUnmount(() => { if (capTimer) clearInterval(capTimer) })
+
+async function loadSmsCaptcha() {
+  const r = await getCaptcha()
+  smsCaptchaKey.value = r.data.captchaKey
+  smsCaptchaImg.value = r.data.captchaImg
+  smsCapExpired.value = false
+  smsCapLoadedAt = Date.now()
+  clearTimer('sms')
+  smsCapTimer = setInterval(() => {
+    if (Date.now() - smsCapLoadedAt >= CAPTCHA_TTL_MS) {
+      smsCapExpired.value = true
+      clearTimer('sms')
+    }
+  }, 1000)
+}
+
+// 切换到新 Tab 时总是拉取一张全新验证码：保证「每处验证码独立获取，不复用前一 Tab」
+function onTabChange(name) {
+  if (name === 'pwd') loadPwdCaptcha()
+  else if (name === 'sms') loadSmsCaptcha()
+}
+
+onBeforeUnmount(() => { clearTimer('pwd'); clearTimer('sms') })
+
 async function onLogin() {
   loading.value = true
   let ok = false
   try {
-    const r = await login({ ...form.value, captchaKey: captchaKey.value })
+    const r = await login({ ...form.value, captchaKey: pwdCaptchaKey.value })
     store.setLogin(r.data)
     ok = true
     ElMessage.success('登录成功')
@@ -128,28 +164,37 @@ async function onLogin() {
     router.replace(safeRedirect(route.query.redirect))
   } finally {
     loading.value = false
-    // 仅登录失败时刷新验证码：成功后立即跳转，无需再发一次验证码请求
-    if (!ok) loadCaptcha()
+    // 登录失败时自动刷新验证码：后端验证码一次性销毁，旧 key 已无法再用
+    if (!ok) loadPwdCaptcha()
   }
 }
 async function onSendSms() {
-  await sendSms({ phone: sms.value.phone, captchaKey: captchaKey.value, captchaCode: sms.value.captchaCode, bizType: 'login' })
-  ElMessage.success('验证码已发送')
-  cd.value = 60
-  const t = setInterval(() => { cd.value--; if (cd.value <= 0) clearInterval(t) }, 1000)
+  try {
+    await sendSms({ phone: sms.value.phone, captchaKey: smsCaptchaKey.value, captchaCode: sms.value.captchaCode, bizType: 'login' })
+    ElMessage.success('验证码已发送')
+    cd.value = 60
+    const t = setInterval(() => { cd.value--; if (cd.value <= 0) clearInterval(t) }, 1000)
+  } catch (e) {
+    // 发送失败（多为图形验证码错误或过期）自动刷新，避免用户手点
+    loadSmsCaptcha()
+  }
 }
 async function onSmsLogin() {
   loading.value = true
+  let ok = false
   try {
     const r = await smsLogin({ phone: sms.value.phone, code: sms.value.code })
     store.setLogin(r.data)
+    ok = true
     ElMessage.success('登录成功')
     router.replace('/dashboard')
   } finally {
     loading.value = false
+    // 短信登录失败自动刷新图形验证码，用户重试时无需手点
+    if (!ok) loadSmsCaptcha()
   }
 }
-onMounted(loadCaptcha)
+onMounted(loadPwdCaptcha)
 </script>
 
 <style scoped>
