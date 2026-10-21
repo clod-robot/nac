@@ -22,7 +22,7 @@
         <el-input v-model="f.ip" placeholder="IP" clearable style="width:130px" @keyup.enter="reloadAll" />
         <el-button :icon="Search" type="primary" @click="reloadAll">查询</el-button>
         <el-button :icon="Refresh" @click="reset">重置</el-button>
-        <el-button :icon="Download" type="warning" :loading="exporting" @click="onExport">导出 CSV</el-button>
+        <el-button :icon="Download" type="warning" :loading="exporting" @click="onExport">导出加密证据包</el-button>
       </div>
     </div>
 
@@ -124,6 +124,21 @@
         </div>
       </div>
     </el-drawer>
+
+    <!-- 加密证据包导出结果：密码仅显示一次，不保存 -->
+    <el-dialog v-model="pwdDialog" title="加密证据包已导出" width="520px"
+      :close-on-click-modal="false" @closed="closePwdDialog">
+      <el-alert type="warning" :closable="false" show-icon
+        title="解压密码仅本次显示，系统不保存、不可找回，请立即抄录并与证据包分开保管。" />
+      <div class="exp-kv"><span class="k">文件名</span><span class="v mono">{{ exportFile }}</span></div>
+      <div class="exp-kv"><span class="k">解压密码</span><span class="v mono pwd">{{ exportPwd }}</span></div>
+      <div class="exp-kv"><span class="k">CSV SHA-256</span><span class="v mono sha">{{ exportSha }}</span></div>
+      <div class="exp-tip">证据包为 AES-256 加密 ZIP，内含只读 CSV；解压需上述密码，请勿临时存放于公共目录。</div>
+      <template #footer>
+        <el-button @click="pwdDialog = false">我已记录</el-button>
+        <el-button type="primary" @click="copyPwd">复制密码</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -142,6 +157,10 @@ const list = ref([]); const total = ref(0); const page = ref(1); const size = re
 const listLoading = ref(false)
 const statLoading = ref(false)
 const exporting = ref(false)
+const pwdDialog = ref(false)
+const exportFile = ref('')
+const exportPwd = ref('')
+const exportSha = ref('')
 
 const drawer = ref(false)
 const cur = ref(null)
@@ -281,7 +300,7 @@ function reset() {
 }
 function onPage(p) { page.value = p; loadList() }
 
-/** 导出当前筛选条件下的完整日志为 CSV（公安电子证据留存，含责任人） */
+/** 导出当前筛选条件下的完整日志为加密证据包（AES-256 ZIP + 只读 CSV + 一次性密码） */
 async function onExport() {
   exporting.value = true
   try {
@@ -292,10 +311,9 @@ async function onExport() {
     if (f.value.mac) params.mac = f.value.mac
     if (f.value.ip) params.ip = f.value.ip
     const r = await traceExport(params)
-    const blob = new Blob([r.data], { type: 'text/csv;charset=UTF-8' })
-    // 优先取后端 Content-Disposition 中的文件名，兜底用本地时间戳
+    const blob = new Blob([r.data], { type: 'application/zip' })
     const cd = r.headers && (r.headers['content-disposition'] || r.headers['Content-Disposition'])
-    let fname = 'SecurityTrace_' + new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + '.csv'
+    let fname = 'SecurityTrace_' + new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + '.zip'
     if (cd) {
       const m = /filename\*?=(?:UTF-8'')?"?([^";]+)/i.exec(cd)
       if (m) fname = decodeURIComponent(m[1])
@@ -308,10 +326,33 @@ async function onExport() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    ElMessage.success('已导出 ' + fname)
+    // 密码仅本次响应的响应头携带，后端不留存；展示后即从内存丢弃，不写入任何本地存储
+    exportFile.value = fname
+    exportPwd.value = (r.headers && r.headers['x-export-password']) || ''
+    exportSha.value = (r.headers && r.headers['x-export-sha256']) || ''
+    pwdDialog.value = true
   } catch (e) {
     ElMessage.error('导出失败：' + (e.message || '未知错误'))
   } finally { exporting.value = false }
+}
+
+async function copyPwd() {
+  const text = exportPwd.value
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('密码已复制')
+  } catch (e) {
+    ElMessage.warning('复制失败，请手动选中复制')
+  }
+}
+
+function closePwdDialog() {
+  pwdDialog.value = false
+  // 关闭即清除，避免密码在内存/页面中残留
+  exportPwd.value = ''
+  exportSha.value = ''
+  exportFile.value = ''
 }
 function resize() {
   [trendInst, typeInst, ssidInst, topUserInst, topMacInst, topNasInst].forEach(i => i && i.resize())
@@ -348,4 +389,10 @@ onBeforeUnmount(() => {
 .detail .k { width: 80px; flex-shrink: 0; color: #909399; }
 .detail .v { flex: 1; color: #303133; word-break: break-all; }
 .mono { font-family: Consolas, Menlo, monospace; }
+.exp-kv { display: flex; margin: 10px 0; font-size: 13px; line-height: 1.6; align-items: flex-start; }
+.exp-kv .k { width: 92px; flex-shrink: 0; color: #909399; }
+.exp-kv .v { flex: 1; color: #303133; word-break: break-all; }
+.exp-kv .pwd { font-size: 15px; font-weight: 600; letter-spacing: 1px; color: #e6a23c; user-select: all; }
+.exp-kv .sha { font-size: 12px; color: #606266; }
+.exp-tip { margin-top: 8px; color: #909399; font-size: 12px; }
 </style>

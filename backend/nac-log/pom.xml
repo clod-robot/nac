@@ -21,6 +21,8 @@
         <dependency><groupId>org.springframework.kafka</groupId><artifactId>spring-kafka</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
         <dependency><groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><optional>true</optional></dependency>
+        <!-- 导出加密证据包：AES-256 加密 ZIP -->
+        <dependency><groupId>net.lingala.zip4j</groupId><artifactId>zip4j</artifactId><version>2.11.5</version></dependency>
     </dependencies>
 
     <build>

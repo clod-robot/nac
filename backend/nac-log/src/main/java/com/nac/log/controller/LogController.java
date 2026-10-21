@@ -14,12 +14,19 @@ import com.nac.log.mapper.OnlineSessionMapper;
 import com.nac.log.mapper.SysLogMapper;
 import com.nac.log.mapper.SysUserBriefMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import net.lingala.zip4j.io.outputstream.ZipOutputStream;
+import net.lingala.zip4j.model.FileHeader;
+import net.lingala.zip4j.model.ZipParameters;
+import net.lingala.zip4j.model.enums.AesKeyStrength;
+import net.lingala.zip4j.model.enums.CompressionLevel;
+import net.lingala.zip4j.model.enums.CompressionMethod;
+import net.lingala.zip4j.model.enums.EncryptionMethod;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -185,12 +192,18 @@ public class LogController {
 
     /**
      * 安全事件溯源 - 导出 CSV（公安电子证据留存）
-     * 复用 auth-list 的筛选条件，LEFT JOIN sys_user 附带责任人姓名/部门，
-     * UTF-8 带 BOM，Excel 直接打开不乱码；单次最多 50000 行。
+     * 复用 auth-list 的筛选条件，LEFT JOIN sys_user 附带责任人姓名/部门，单次最多 50000 行。
+     *
+     * 防篡改交付方式：
+     * 1. CSV 打包为 AES-256 加密 ZIP（WinZip AES，含 HMAC 完整性校验，改动一字节即无法解压）；
+     * 2. ZIP 内 CSV 条目标记为只读（Unix 0444 + DOS 只读属性），解压后不可直接修改；
+     * 3. 每次导出用 SecureRandom 生成 28 位高强度随机密码，仅通过响应头 X-Export-Password 返回一次，
+     *    服务端不写库、不落盘、不写日志，任何人（含管理员）事后无法再取得该密码；
+     * 4. 同时返回 CSV 的 SHA-256（X-Export-Sha256），可用于事后校验证据是否与归档时一致。
      */
     @GetMapping("/trace/export")
     @RequireRole("admin")
-    @OperationLog("导出安全事件溯源 CSV")
+    @OperationLog("导出安全事件溯源加密证据包")
     public void exportTrace(@RequestParam(required = false) String type,
                             @RequestParam(required = false) Integer result,
                             @RequestParam(required = false) String username,
@@ -206,39 +219,89 @@ public class LogController {
         List<Map<String, Object>> rows = authLogMapper.selectForExport(
                 trim(type), result, trim(username), trim(mac), trim(ip), st, et, 50000);
 
-        String filename = "SecurityTrace_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".csv";
-        response.setContentType("text/csv; charset=UTF-8");
-        response.setHeader("Content-Disposition",
-                "attachment; filename=\"" + URLEncoder.encode(filename, StandardCharsets.UTF_8) + "\"");
-        PrintWriter w = response.getWriter();
+        StringBuilder sb = new StringBuilder();
         // UTF-8 BOM：让 Excel 直接识别为 UTF-8，中文表头/内容不乱码
-        w.write(0xFEFF);
-        w.println("序号,时间,认证类型,账号,手机号,MAC,终端IP,NAS IP,NAS 名称,SSID,结果,说明,责任人姓名,责任人账号,责任人部门");
+        sb.append('\uFEFF');
+        sb.append("序号,时间,认证类型,账号,手机号,MAC,终端IP,NAS IP,NAS 名称,SSID,结果,说明,责任人姓名,责任人账号,责任人部门\n");
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         int idx = 1;
         for (Map<String, Object> r : rows) {
             Object ct = r.get("createTime");
             String timeStr = (ct instanceof LocalDateTime) ? ((LocalDateTime) ct).format(fmt) : String.valueOf(ct == null ? "" : ct);
             Integer res = r.get("result") instanceof Number ? ((Number) r.get("result")).intValue() : null;
-            StringBuilder sb = new StringBuilder();
-            sb.append(idx++);
-            sb.append(',').append(csv(timeStr));
-            sb.append(',').append(csv(str(r.get("authType"))));
-            sb.append(',').append(csv(str(r.get("username"))));
-            sb.append(',').append(csv(str(r.get("phone"))));
-            sb.append(',').append(csv(str(r.get("mac"))));
-            sb.append(',').append(csv(str(r.get("ip"))));
-            sb.append(',').append(csv(str(r.get("nasIp"))));
-            sb.append(',').append(csv(str(r.get("nasName"))));
-            sb.append(',').append(csv(str(r.get("ssid"))));
-            sb.append(',').append(res == null ? "" : (res == 1 ? "成功" : "失败"));
-            sb.append(',').append(csv(str(r.get("message"))));
-            sb.append(',').append(csv(str(r.get("respName"))));
-            sb.append(',').append(csv(str(r.get("respUsername"))));
-            sb.append(',').append(csv(str(r.get("respDept"))));
-            w.println(sb);
+            StringBuilder line = new StringBuilder();
+            line.append(idx++);
+            line.append(',').append(csv(timeStr));
+            line.append(',').append(csv(str(r.get("authType"))));
+            line.append(',').append(csv(str(r.get("username"))));
+            line.append(',').append(csv(str(r.get("phone"))));
+            line.append(',').append(csv(str(r.get("mac"))));
+            line.append(',').append(csv(str(r.get("ip"))));
+            line.append(',').append(csv(str(r.get("nasIp"))));
+            line.append(',').append(csv(str(r.get("nasName"))));
+            line.append(',').append(csv(str(r.get("ssid"))));
+            line.append(',').append(res == null ? "" : (res == 1 ? "成功" : "失败"));
+            line.append(',').append(csv(str(r.get("message"))));
+            line.append(',').append(csv(str(r.get("respName"))));
+            line.append(',').append(csv(str(r.get("respUsername"))));
+            line.append(',').append(csv(str(r.get("respDept"))));
+            sb.append(line).append('\n');
         }
-        w.flush();
+        byte[] csvBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+
+        String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String csvName = "SecurityTrace_" + ts + ".csv";
+        String zipName = "SecurityTrace_" + ts + ".zip";
+        String password = randomPassword(28);
+        String sha256 = sha256Hex(csvBytes);
+
+        response.setContentType("application/zip");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + zipName + "\"");
+        // 密码仅此一次随响应返回，前端展示后即丢失，服务端不留存
+        response.setHeader("X-Export-Password", password);
+        response.setHeader("X-Export-Sha256", sha256);
+        response.setHeader("Access-Control-Expose-Headers",
+                "Content-Disposition, X-Export-Password, X-Export-Sha256");
+
+        ZipParameters zp = new ZipParameters();
+        zp.setFileNameInZip(csvName);
+        zp.setEncryptFiles(true);
+        zp.setEncryptionMethod(EncryptionMethod.AES);
+        zp.setAesKeyStrength(AesKeyStrength.KEY_STRENGTH_256);
+        zp.setCompressionMethod(CompressionMethod.DEFLATE);
+        zp.setCompressionLevel(CompressionLevel.NORMAL);
+        zp.setOverrideExistingFilesInZip(true);
+
+        try (ZipOutputStream zos = new ZipOutputStream(response.getOutputStream(), password.toCharArray())) {
+            zos.putNextEntry(zp);
+            zos.write(csvBytes);
+            FileHeader fh = zos.closeEntry();
+            // 0x01240021：高 16 位 = Unix 0444(r--r--r--)，低位 = DOS 只读 + 归档，解压后禁止修改
+            fh.setExternalFileAttributes(new byte[]{0x21, 0x00, 0x24, 0x01});
+        }
+    }
+
+    /** 高强度随机密码字符集：去掉 0/O/1/I/l 等易混淆字符，28 位随机串熵约 160 bit */
+    private static final String PWD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    private static String randomPassword(int len) {
+        StringBuilder sb = new StringBuilder(len);
+        for (int i = 0; i < len; i++) {
+            sb.append(PWD_ALPHABET.charAt(SECURE_RANDOM.nextInt(PWD_ALPHABET.length())));
+        }
+        return sb.toString();
+    }
+
+    private static String sha256Hex(byte[] data) {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(data);
+            StringBuilder sb = new StringBuilder(d.length * 2);
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private static String str(Object o) { return o == null ? "" : String.valueOf(o); }
