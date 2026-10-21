@@ -27,6 +27,10 @@ export const authLogList = (params) => request.get('/api/log/auth-list', { param
 export const onlineList = (params) => request.get('/api/log/online-list', { params })
 export const onlineDelete = (id) => request.delete(`/api/log/online/${id}`)
 
+// 安全事件溯源（admin）
+export const traceStats = (params) => request.get('/api/log/trace/stats', { params })
+export const traceUser = (params) => request.get('/api/log/trace/user', { params })
+
 // RADIUS 802.1X 口令管理（admin）
 export const getRadiusStatus = (username) => request.get('/api/auth/radius/password', { params: { username } })
 export const setRadiusPassword = (data) => request.post('/api/auth/radius/password', data)

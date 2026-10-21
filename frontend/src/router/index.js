@@ -21,6 +21,7 @@ const routes = [
       { path: 'nas', component: () => import('../views/NasManage.vue'), meta: { roles: ['admin'] } },
       { path: 'op-log', component: () => import('../views/OpLog.vue'), meta: { roles: ['admin'] } },
       { path: 'auth-log', component: () => import('../views/AuthLog.vue'), meta: { roles: ['admin'] } },
+      { path: 'security-trace', component: () => import('../views/SecurityTrace.vue'), meta: { roles: ['admin'] } },
       { path: 'syslog', component: () => import('../views/SyslogManage.vue'), meta: { roles: ['admin'] } },
       { path: 'online', component: () => import('../views/OnlineManage.vue'), meta: { roles: ['admin'] } },
       { path: 'terminal', component: () => import('../views/Terminal.vue'), meta: { roles: ['admin'] } }

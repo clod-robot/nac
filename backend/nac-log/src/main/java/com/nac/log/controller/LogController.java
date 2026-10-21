@@ -8,11 +8,15 @@ import com.nac.common.security.RequireRole;
 import com.nac.log.entity.AuthLog;
 import com.nac.log.entity.OnlineSession;
 import com.nac.log.entity.SysLog;
+import com.nac.log.entity.SysUserBrief;
 import com.nac.log.mapper.AuthLogMapper;
 import com.nac.log.mapper.OnlineSessionMapper;
 import com.nac.log.mapper.SysLogMapper;
+import com.nac.log.mapper.SysUserBriefMapper;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,13 +32,16 @@ public class LogController {
     private final SysLogMapper sysLogMapper;
     private final AuthLogMapper authLogMapper;
     private final OnlineSessionMapper onlineSessionMapper;
+    private final SysUserBriefMapper sysUserBriefMapper;
     private final RedisUtil redisUtil;
 
     public LogController(SysLogMapper sysLogMapper, AuthLogMapper authLogMapper,
-                         OnlineSessionMapper onlineSessionMapper, RedisUtil redisUtil) {
+                         OnlineSessionMapper onlineSessionMapper, SysUserBriefMapper sysUserBriefMapper,
+                         RedisUtil redisUtil) {
         this.sysLogMapper = sysLogMapper;
         this.authLogMapper = authLogMapper;
         this.onlineSessionMapper = onlineSessionMapper;
+        this.sysUserBriefMapper = sysUserBriefMapper;
         this.redisUtil = redisUtil;
     }
 
@@ -113,6 +120,62 @@ public class LogController {
 
     private static String trim(String s) {
         return s == null ? null : (s.trim().isEmpty() ? null : s.trim());
+    }
+
+    /**
+     * 安全事件溯源 - 统计分析
+     * 返回指定时间窗内的认证趋势、Top 失败终端/用户/NAS、SSID 分布、认证类型分布。
+     * 时间参数缺省时默认近 24 小时。
+     */
+    @GetMapping("/trace/stats")
+    @RequireRole("admin")
+    public Result<Map<String, Object>> traceStats(@RequestParam(required = false) String startTime,
+                                                  @RequestParam(required = false) String endTime,
+                                                  @RequestParam(defaultValue = "10") int topN) {
+        String st = trim(startTime);
+        String et = trim(endTime);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        if (et == null) et = LocalDateTime.now().format(fmt);
+        if (st == null) st = LocalDateTime.now().minusHours(24).format(fmt);
+        // 前端 datetime 控件精确到分时，结束时间补秒以覆盖该分钟
+        if (et.length() == 16) et = et + ":59";
+        if (st.length() == 16) st = st + ":00";
+        int limit = Math.min(Math.max(topN, 1), 50);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("startTime", st);
+        data.put("endTime", et);
+        data.put("trend", authLogMapper.statTrendByHour(st, et));
+        data.put("topFailMac", authLogMapper.statTopFailMac(st, et, limit));
+        data.put("topFailUser", authLogMapper.statTopFailUser(st, et, limit));
+        data.put("topFailNas", authLogMapper.statTopFailNas(st, et, limit));
+        data.put("ssidDist", authLogMapper.statSsidDist(st, et));
+        data.put("authTypeDist", authLogMapper.statAuthTypeDist(st, et));
+        return Result.success(data);
+    }
+
+    /**
+     * 安全事件溯源 - 责任人反查
+     * 优先按 username 精确匹配；若 username 为空（如 portal 短信认证），回退按 phone 匹配。
+     * 返回最小必要字段，不包含密文。
+     */
+    @GetMapping("/trace/user")
+    @RequireRole("admin")
+    public Result<Map<String, Object>> traceUser(@RequestParam(required = false) String username,
+                                                 @RequestParam(required = false) String phone) {
+        String un = trim(username);
+        String ph = trim(phone);
+        SysUserBrief user = null;
+        if (un != null) {
+            user = sysUserBriefMapper.selectByUsername(un);
+        }
+        if (user == null && ph != null) {
+            user = sysUserBriefMapper.selectByPhone(ph);
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("found", user != null);
+        data.put("user", user);
+        return Result.success(data);
     }
 
     /** 强制下线（删除在线会话记录） */

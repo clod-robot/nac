@@ -28,4 +28,87 @@
         <include refid="cond"/>
     </select>
 
+    <!-- 公共时间窗条件（仅 start/end，用于统计） -->
+    <sql id="timeCond">
+        <where>
+            <if test="startTime != null and startTime != ''">AND create_time &gt;= #{startTime}</if>
+            <if test="endTime != null and endTime != ''">AND create_time &lt;= #{endTime}</if>
+        </where>
+    </sql>
+
+    <!-- 按小时统计成功/失败趋势 -->
+    <select id="statTrendByHour" resultType="map">
+        SELECT DATE_FORMAT(create_time, '%Y-%m-%d %H:00') AS bucket,
+               SUM(CASE WHEN result = 1 THEN 1 ELSE 0 END) AS success,
+               SUM(CASE WHEN result = 1 THEN 0 ELSE 1 END) AS fail
+        FROM sys_auth_log
+        <include refid="timeCond"/>
+        GROUP BY bucket
+        ORDER BY bucket
+    </select>
+
+    <!-- Top 失败终端（MAC） -->
+    <select id="statTopFailMac" resultType="map">
+        SELECT mac AS name, COUNT(1) AS value
+        FROM sys_auth_log
+        <where>
+            result &lt;&gt; 1
+            AND mac IS NOT NULL AND mac &lt;&gt; ''
+            <if test="startTime != null and startTime != ''">AND create_time &gt;= #{startTime}</if>
+            <if test="endTime != null and endTime != ''">AND create_time &lt;= #{endTime}</if>
+        </where>
+        GROUP BY mac
+        ORDER BY value DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- Top 失败用户 -->
+    <select id="statTopFailUser" resultType="map">
+        SELECT COALESCE(NULLIF(username,''), NULLIF(phone,''), '(未知)') AS name, COUNT(1) AS value
+        FROM sys_auth_log
+        <where>
+            result &lt;&gt; 1
+            <if test="startTime != null and startTime != ''">AND create_time &gt;= #{startTime}</if>
+            <if test="endTime != null and endTime != ''">AND create_time &lt;= #{endTime}</if>
+        </where>
+        GROUP BY name
+        ORDER BY value DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- Top 失败 NAS -->
+    <select id="statTopFailNas" resultType="map">
+        SELECT COALESCE(NULLIF(nas_name,''), NULLIF(nas_ip,''), '(未知)') AS name, COUNT(1) AS value
+        FROM sys_auth_log
+        <where>
+            result &lt;&gt; 1
+            <if test="startTime != null and startTime != ''">AND create_time &gt;= #{startTime}</if>
+            <if test="endTime != null and endTime != ''">AND create_time &lt;= #{endTime}</if>
+        </where>
+        GROUP BY name
+        ORDER BY value DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- NAS/SSID 分布 -->
+    <select id="statSsidDist" resultType="map">
+        SELECT COALESCE(NULLIF(ssid,''), '(有线/未知)') AS name, COUNT(1) AS value
+        FROM sys_auth_log
+        <include refid="timeCond"/>
+        GROUP BY name
+        ORDER BY value DESC
+    </select>
+
+    <!-- 认证类型分布：成功/失败 -->
+    <select id="statAuthTypeDist" resultType="map">
+        SELECT auth_type AS name,
+               SUM(CASE WHEN result = 1 THEN 1 ELSE 0 END) AS success,
+               SUM(CASE WHEN result = 1 THEN 0 ELSE 1 END) AS fail,
+               COUNT(1) AS value
+        FROM sys_auth_log
+        <include refid="timeCond"/>
+        GROUP BY auth_type
+        ORDER BY value DESC
+    </select>
+
 </mapper>
