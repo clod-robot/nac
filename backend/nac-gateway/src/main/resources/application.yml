@@ -8,6 +8,8 @@ spring:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
+      # Redis 8 默认 RESP3：HELLO 握手需同时携带用户名，否则报 NOAUTH
+      username: ${REDIS_USERNAME:default}
       password: ${REDIS_PASSWORD:hipXkCn4on2Yr8QgPyBT8TEGNUnN_a3_}
       timeout: 3000ms
   cloud:
