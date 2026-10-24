@@ -201,4 +201,18 @@ async function onSave() {
 <style scoped>
 .sms-aliyun-tabs :deep(.el-tabs__header) { margin-bottom: 16px; }
 .hint { margin-left: 8px; color: #909399; font-size: 12px; }
+
+/* Tab 切换：内容淡入上浮 + 指示条回弹滑动，避免生硬跳变 */
+.sms-aliyun-tabs :deep(.el-tab-pane.is-active) { animation: smsTabIn .34s cubic-bezier(.22,.61,.36,1) both; }
+.sms-aliyun-tabs :deep(.el-tabs__active-bar) { transition: transform .36s cubic-bezier(.34,1.3,.64,1), width .36s cubic-bezier(.34,1.3,.64,1); }
+.sms-aliyun-tabs :deep(.el-tabs__item) { transition: color .25s ease; }
+.sms-aliyun-tabs :deep(.el-tabs__item:hover) { color: #409EFF; }
+@keyframes smsTabIn {
+  from { opacity: 0; transform: translateY(10px) scale(.99); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sms-aliyun-tabs :deep(.el-tab-pane.is-active) { animation: none !important; }
+  .sms-aliyun-tabs :deep(.el-tabs__active-bar) { transition: none !important; }
+}
 </style>

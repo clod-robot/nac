@@ -50,7 +50,7 @@
           </el-dropdown>
         </div>
       </el-header>
-      <el-main><router-view /></el-main>
+      <el-main><div class="page-shell" :class="{ 'page-in': pageAnim }"><router-view /></div></el-main>
     </el-container>
 
     <!-- NTP 修改弹窗 -->
@@ -115,8 +115,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Odometer, Setting, Tools, Message, Document, Tickets, Monitor, Connection, ArrowDown, Key, Menu, User, Share, Clock, Edit, Aim } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
@@ -125,9 +125,18 @@ import { useBreakpoints } from '../composables/useBreakpoints'
 import { useIdleTimeout } from '../composables/useIdleTimeout'
 
 const router = useRouter()
+const route = useRoute()
 const store = useUserStore()
 const { isNarrow } = useBreakpoints()
 const drawer = ref(false)
+
+// 路由切换动效：先移除再添加 class，保证每次跳转都重播淡入上浮动画
+const pageAnim = ref(true)
+watch(() => route.fullPath, async () => {
+  pageAnim.value = false
+  await nextTick()
+  pageAnim.value = true
+})
 
 // 强制修改默认密码
 const forcePwdVisible = ref(false)
@@ -259,9 +268,39 @@ async function onCmd(c) {
 }
 /* 强制改密遮罩：未改密前不允许操作页面 */
 .must-change-mask { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
+
+/* 路由内容切换：淡入上浮，让页面跳转不突兀 */
+.page-shell { will-change: opacity, transform; }
+.page-shell.page-in { animation: pageIn .32s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 侧边菜单：悬停/激活过渡 + 激活项左侧滑出指示条 */
+.aside :deep(.el-menu-item), .aside :deep(.el-sub-menu__title) { transition: background-color .22s ease, color .22s ease; }
+.aside :deep(.el-menu-item) { position: relative; }
+.aside :deep(.el-menu-item)::before {
+  content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 0;
+  background: #409EFF; border-radius: 0 2px 2px 0; transform: translateY(-50%);
+  transition: height .28s cubic-bezier(.34,1.3,.64,1);
+}
+.aside :deep(.el-menu-item.is-active)::before { height: 60%; }
+.aside :deep(.el-menu-item:hover) { background-color: #263445 !important; }
+@media (prefers-reduced-motion: reduce) {
+  .page-shell.page-in { animation: none !important; }
+  .aside :deep(.el-menu-item)::before { transition: none !important; }
+}
 </style>
 
 <style>
 /* el-drawer 渲染到 body，scoped 不生效，单独定义 */
 .nav-drawer .el-drawer__body { padding: 0; background: #1f2d3d; }
+.nav-drawer .el-menu-item { position: relative; transition: background-color .22s ease, color .22s ease; }
+.nav-drawer .el-menu-item::before {
+  content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 0;
+  background: #409EFF; border-radius: 0 2px 2px 0; transform: translateY(-50%);
+  transition: height .28s cubic-bezier(.34,1.3,.64,1);
+}
+.nav-drawer .el-menu-item.is-active::before { height: 60%; }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <div class="login-wrap">
-    <el-card class="login-card">
+    <el-card class="login-card" :class="{ shake }">
       <template #header><div class="title">NAC 准入控制系统</div></template>
       <el-tabs v-model="tab" @tab-change="onTabChange">
         <el-tab-pane label="账号登录" name="pwd">
@@ -15,7 +15,7 @@
               <div class="cap-row">
                 <el-input v-model="form.captchaCode" placeholder="图形验证码" />
                 <div class="cap-box" @click="loadPwdCaptcha" title="点击刷新">
-                  <img v-if="pwdCaptchaImg" :src="pwdCaptchaImg" class="cap-img" />
+                  <img v-if="pwdCaptchaImg" :key="pwdCaptchaImg" :src="pwdCaptchaImg" class="cap-img" />
                   <div v-if="pwdCapExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
                 </div>
               </div>
@@ -32,7 +32,7 @@
               <div class="cap-row">
                 <el-input v-model="sms.captchaCode" placeholder="图形验证码" />
                 <div class="cap-box" @click="loadSmsCaptcha" title="点击刷新">
-                  <img v-if="smsCaptchaImg" :src="smsCaptchaImg" class="cap-img" />
+                  <img v-if="smsCaptchaImg" :key="smsCaptchaImg" :src="smsCaptchaImg" class="cap-img" />
                   <div v-if="smsCapExpired" class="cap-mask">验证码已过期<br />点击刷新</div>
                 </div>
               </div>
@@ -59,7 +59,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { User, Lock, Download } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -82,6 +82,17 @@ const loading = ref(false)
 const form = ref({ username: '', password: '', captchaCode: '' })
 const sms = ref({ phone: '', captchaCode: '', code: '' })
 const cd = ref(0)
+
+// 登录失败时的轻微抖动反馈：先移除再添加，保证连续失败也能重新触发动画
+const shake = ref(false)
+let shakeTimer = null
+async function triggerShake() {
+  shake.value = false
+  await nextTick()
+  shake.value = true
+  clearTimeout(shakeTimer)
+  shakeTimer = setTimeout(() => { shake.value = false }, 450)
+}
 
 // 与后端 Redis 验证码 TTL(300s) 一致：到期后图片加灰色遮罩提醒过期，点击刷新
 const CAPTCHA_TTL_MS = 5 * 60 * 1000
@@ -165,7 +176,7 @@ async function onLogin() {
   } finally {
     loading.value = false
     // 登录失败时自动刷新验证码：后端验证码一次性销毁，旧 key 已无法再用
-    if (!ok) loadPwdCaptcha()
+    if (!ok) { loadPwdCaptcha(); triggerShake() }
   }
 }
 async function onSendSms() {
@@ -177,6 +188,7 @@ async function onSendSms() {
   } catch (e) {
     // 发送失败（多为图形验证码错误或过期）自动刷新，避免用户手点
     loadSmsCaptcha()
+    triggerShake()
   }
 }
 async function onSmsLogin() {
@@ -191,7 +203,7 @@ async function onSmsLogin() {
   } finally {
     loading.value = false
     // 短信登录失败自动刷新图形验证码，用户重试时无需手点
-    if (!ok) loadSmsCaptcha()
+    if (!ok) { loadSmsCaptcha(); triggerShake() }
   }
 }
 onMounted(loadPwdCaptcha)
@@ -204,11 +216,43 @@ onMounted(loadPwdCaptcha)
 .cap-row { display: flex; gap: 8px; width: 100%; align-items: center; }
 .cap-row .el-input { flex: 1; min-width: 0; }
 /* 按图片原始高度 1:1 显示，避免浏览器下采样把字符渲染发虚（灰蒙蒙） */
-.cap-box { position: relative; flex-shrink: 0; cursor: pointer; border: 1px solid #dcdfe6; border-radius: 4px; overflow: hidden; line-height: 0; }
-.cap-img { height: 48px; display: block; }
+.cap-box { position: relative; flex-shrink: 0; cursor: pointer; border: 1px solid #dcdfe6; border-radius: 4px; overflow: hidden; line-height: 0; perspective: 600px; }
+.cap-img { height: 48px; display: block; animation: capIn .4s cubic-bezier(.22,.61,.36,1) both; }
 /* 过期遮罩：5 分钟未提交登录，后端验证码已过期，灰蒙蒙提示点击刷新 */
 .cap-mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); color: #fff; font-size: 12px; line-height: 1.5; display: flex; align-items: center; justify-content: center; text-align: center; }
 .tip { margin-top: 12px; color: #909399; font-size: 12px; text-align: center; }
 .dl-row { margin-top: 10px; text-align: center; font-size: 12px; }
 .dl-tip { color: #909399; margin-left: 6px; }
+
+/* Tab 切换：内容淡入上浮，切回时重播；指示条带回弹滑动 */
+.login-card :deep(.el-tab-pane.is-active) { animation: tabIn .34s cubic-bezier(.22,.61,.36,1) both; }
+.login-card :deep(.el-tabs__active-bar) { transition: transform .36s cubic-bezier(.34,1.3,.64,1), width .36s cubic-bezier(.34,1.3,.64,1); }
+.login-card :deep(.el-tabs__item) { transition: color .25s ease; }
+.login-card :deep(.el-tabs__item:hover) { color: #409EFF; }
+
+/* 登录失败：卡片轻微抖动；验证码刷新：3D 翻转进入 */
+.shake { animation: cardShake .45s ease; }
+.cap-mask { animation: fadeIn .25s ease; }
+
+@keyframes tabIn {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes capIn {
+  from { opacity: .2; transform: rotateY(-75deg) scale(.9); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cardShake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .shake, .cap-img, .cap-mask, .login-card :deep(.el-tab-pane.is-active) { animation: none !important; }
+  .login-card :deep(.el-tabs__active-bar) { transition: none !important; }
+}
 </style>
