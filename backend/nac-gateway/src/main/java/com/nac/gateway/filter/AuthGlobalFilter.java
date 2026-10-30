@@ -81,16 +81,23 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         final long expireSec = jwtUtil.getExpireSeconds();
         // Redis 是阻塞 IO，绝不能在 Netty 事件环上执行——切到 boundedElastic 线程池，
         // 否则并发一高事件环被占满，整个网关吞吐塌陷、请求大面积超时。
+        // 注意：Mono.fromCallable 返回 null 会变成「空 Mono」，flatMap 被整个跳过，
+        // 响应会以默认 200 + 空 body 结束（既不 401 也不报错）。因此这里必须返回非 null 的布尔值。
         return Mono.fromCallable(() -> {
             String key = RedisKeyConstants.TOKEN_PREFIX + uid;
-            if (!Boolean.TRUE.equals(redisTemplate.hasKey(key))) return null;
-            redisTemplate.expire(key, Duration.ofSeconds(expireSec));
-            return uid;
+            boolean alive = Boolean.TRUE.equals(redisTemplate.hasKey(key));
+            if (alive) redisTemplate.expire(key, Duration.ofSeconds(expireSec));
+            return alive;
         }).subscribeOn(Schedulers.boundedElastic())
-        .flatMap(id -> {
-            if (id == null) return unauthorized(exchange, "登录已失效，请重新登录");
+        .onErrorResume(e -> {
+            // Redis 不可用时按“登录态不可验证”处理，返回 401 而不是空响应
+            log.error("网关校验登录态异常, uid={}: {}", uid, e.getMessage());
+            return Mono.just(false);
+        })
+        .flatMap(alive -> {
+            if (!alive) return unauthorized(exchange, "登录已失效，请重新登录");
             ServerHttpRequest mutated = cleanHeaders(request).mutate()
-                    .header("X-User-Id", id)
+                    .header("X-User-Id", uid)
                     .header("X-User-Name", jwtUtil.getUsername(token))
                     .header("X-User-Role", jwtUtil.getRole(token))
                     .build();
