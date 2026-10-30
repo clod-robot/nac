@@ -17,6 +17,9 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        # Nacos 已开启鉴权，客户端必须携带账号口令，否则服务发现 403
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:Nacos@a3T6PLeR8bVFHAhgtd}
         namespace: ${NACOS_NAMESPACE:public}
     # Spring Cloud Gateway (WebFlux) 路由
     gateway:
