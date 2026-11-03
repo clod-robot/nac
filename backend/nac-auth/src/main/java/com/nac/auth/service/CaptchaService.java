@@ -38,16 +38,20 @@ public class CaptchaService {
      */
     private static final String CAPTCHA_CHARS = "ABCDEFGHJKMNPQRTUVWXY346789";
     private static final int CODE_LENGTH = 4;
-    private static final int WIDTH = 130;
-    private static final int HEIGHT = 48;
-    /** 字符下方干扰线数量：提升干扰度，浅灰细线不遮挡深色字符 */
-    private static final int LINE_COUNT = 5;
-    /** 字符上方干扰线数量：1 条细线压过字符，增强干扰而不影响辨认 */
-    private static final int OVER_LINE_COUNT = 1;
-    /** 噪点数量：随机彩色小点，增加背景纹理 */
-    private static final int DOT_COUNT = 24;
+    private static final int WIDTH = 140;
+    private static final int HEIGHT = 52;
+    /** 字符下方彩色干扰线数量：提升干扰度，浅灰细线不遮挡深色字符 */
+    private static final int LINE_COUNT = 6;
+    /** 压字符的深色干扰线数量：取自字符同色池，破坏按颜色分割字符的 OCR 预处理 */
+    private static final int DARK_OVER_LINE_COUNT = 3;
+    /** 背景噪点数量：随机彩色小点，增加背景纹理 */
+    private static final int DOT_COUNT = 40;
+    /** 前景噪点数量：撒在字符上方的浅色小点，干扰字符轮廓提取 */
+    private static final int FG_DOT_COUNT = 30;
     /** 彩色弧线数量：位于字符下方，增加花花绿绿的干扰纹理 */
-    private static final int ARC_COUNT = 2;
+    private static final int ARC_COUNT = 3;
+    /** 单字符渲染缓冲区宽度（> 最大字宽，容纳旋转/扭曲溢出） */
+    private static final int CELL_W = 34;
     /** 字符颜色池：高饱和深色系，与白底对比度高，保证人眼可读 */
     private static final Color[] CHAR_COLORS = {
             new Color(178, 34, 34),   // 火砖红
@@ -88,21 +92,32 @@ public class CaptchaService {
         return new CaptchaVO(key, captcha.getImageBase64Data());
     }
 
-    /** 校验成功返回 true 并销毁；失败返回 false（不销毁，允许有限重试由调用方控制） */
+    /** 校验成功返回 true 并销毁；失败计数，同一验证码错 3 次即销毁（防对同一码反复枚举/OCR 多轮投票） */
     public boolean verify(String key, String code) {
         if (key == null || code == null) return false;
-        String stored = redisUtil.get(RedisKeyConstants.CAPTCHA_PREFIX + key);
+        String k = RedisKeyConstants.CAPTCHA_PREFIX + key;
+        String stored = redisUtil.get(k);
         if (stored == null) return false;
         boolean ok = stored.equalsIgnoreCase(code);
         if (ok) {
-            redisUtil.delete(RedisKeyConstants.CAPTCHA_PREFIX + key);
+            redisUtil.delete(k);
+            redisUtil.delete(k + ":fails");
+            return true;
         }
-        return ok;
+        long fails = redisUtil.incr(k + ":fails", TTL);
+        if (fails >= 3) {
+            redisUtil.delete(k);
+            redisUtil.delete(k + ":fails");
+            log.warn("验证码失败次数超限销毁: fails={}", fails);
+        }
+        return false;
     }
 
     /**
-     * 自定义渲染的彩色干扰验证码：纯白底、彩色干扰线/噪点/弧线、
-     * 逐字随机高饱和深色加粗字符、不透明、轻微位移 + 小角度旋转。
+     * 自定义渲染的抗 OCR 验证码：纯白底 + 彩色背景纹理，逐字符独立渲染
+     * （随机字号/深色/大角度旋转）后做正弦波形扭曲，再以「粘连」间距贴合，
+     * 最后压上与字符同色的深色干扰线——破坏二值化、颜色过滤与字符切分
+     * 三类 OCR 预处理，人眼仍可读。
      */
     static class ReadableLineCaptcha extends LineCaptcha {
 
@@ -125,7 +140,7 @@ public class CaptchaService {
 
                 ThreadLocalRandom rnd = ThreadLocalRandom.current();
 
-                // 彩色干扰线 + 噪点 + 弧线（先画，位于字符之下，不遮挡字符）
+                // 背景干扰：彩色细线 + 弧线 + 噪点（先画，位于字符之下）
                 g.setStroke(new BasicStroke(1f));
                 int lines = Math.max(0, this.interfereCount);
                 for (int i = 0; i < lines; i++) {
@@ -133,11 +148,6 @@ public class CaptchaService {
                     g.drawLine(rnd.nextInt(this.width), rnd.nextInt(this.height),
                             rnd.nextInt(this.width), rnd.nextInt(this.height));
                 }
-                for (int i = 0; i < DOT_COUNT; i++) {
-                    g.setColor(NOISE_COLORS[rnd.nextInt(NOISE_COLORS.length)]);
-                    g.fillRect(rnd.nextInt(this.width), rnd.nextInt(this.height), 2, 2);
-                }
-                // 彩色弧线：进一步增加纹理复杂度
                 for (int i = 0; i < ARC_COUNT; i++) {
                     g.setColor(NOISE_COLORS[rnd.nextInt(NOISE_COLORS.length)]);
                     g.drawArc(rnd.nextInt(this.width / 2), rnd.nextInt(this.height / 2),
@@ -145,40 +155,74 @@ public class CaptchaService {
                             this.height / 2 + rnd.nextInt(this.height),
                             rnd.nextInt(360), 60 + rnd.nextInt(120));
                 }
-
-                // 彩色加粗字符：逐字随机深色 + 轻微位移 + 小角度旋转（±18°），
-                // 人眼易读但显著提升机器 OCR 切分与识别难度
-                g.setFont(CAPTCHA_FONT);
-                FontMetrics fm = g.getFontMetrics();
-                int len = code.length();
-                int cell = this.width / (len + 1);
-                int baseY = (this.height - fm.getHeight()) / 2 + fm.getAscent();
-                for (int i = 0; i < len; i++) {
-                    String ch = String.valueOf(code.charAt(i));
-                    int cw = fm.stringWidth(ch);
-                    int x = cell * (i + 1) - cw / 2 + rnd.nextInt(5) - 2;
-                    int y = baseY + rnd.nextInt(5) - 2;
-                    Graphics2D gc = (Graphics2D) g.create();
-                    try {
-                        gc.setColor(CHAR_COLORS[rnd.nextInt(CHAR_COLORS.length)]);
-                        gc.rotate(Math.toRadians(rnd.nextInt(37) - 18),
-                                x + cw / 2.0, y - fm.getAscent() / 2.0);
-                        gc.drawString(ch, x, y);
-                    } finally {
-                        gc.dispose();
-                    }
+                for (int i = 0; i < DOT_COUNT; i++) {
+                    g.setColor(NOISE_COLORS[rnd.nextInt(NOISE_COLORS.length)]);
+                    g.fillRect(rnd.nextInt(this.width), rnd.nextInt(this.height), 2, 2);
                 }
 
-                // 1 条彩色细线压在字符上方，增强干扰但深色字符仍清晰可辨
-                for (int i = 0; i < OVER_LINE_COUNT; i++) {
+                // 逐字符：独立缓冲 → 随机字号/深色/旋转 → 波形扭曲 → 粘连贴合。
+                // advance < CELL_W 使相邻字符边缘交叠，OCR 难以按空白列切分
+                int len = code.length();
+                int advance = CELL_W - 8 + rnd.nextInt(3);            // 字距 26~28，粘连 6~8px
+                int totalW = advance * (len - 1) + CELL_W;
+                int startX = Math.max(0, (this.width - totalW) / 2);
+                for (int i = 0; i < len; i++) {
+                    String ch = String.valueOf(code.charAt(i));
+                    BufferedImage buf = new BufferedImage(CELL_W, this.height, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D gb = buf.createGraphics();
+                    try {
+                        gb.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                        gb.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                        gb.setFont(CAPTCHA_FONT.deriveFont((float) (27 + rnd.nextInt(6))));   // 27~32 随机字号
+                        gb.setColor(CHAR_COLORS[rnd.nextInt(CHAR_COLORS.length)]);
+                        FontMetrics fm = gb.getFontMetrics();
+                        int cw = fm.stringWidth(ch);
+                        int cy = (this.height - fm.getHeight()) / 2 + fm.getAscent();
+                        gb.rotate(Math.toRadians(rnd.nextInt(57) - 28), CELL_W / 2.0, this.height / 2.0);
+                        gb.drawString(ch, (CELL_W - cw) / 2, cy);
+                    } finally {
+                        gb.dispose();
+                    }
+                    // 正弦波形扭曲：逐列垂直位移，破坏字符基线与骨架提取
+                    BufferedImage warped = waveDistort(buf,
+                            2.5 + rnd.nextDouble() * 1.5,           // 幅度 2.5~4px
+                            20 + rnd.nextInt(12),                   // 周期 20~31px
+                            rnd.nextDouble() * Math.PI * 2);        // 随机相位
+                    g.drawImage(warped, startX + i * advance, rnd.nextInt(5) - 2, null);
+                }
+
+                // 深色干扰线压字符：与字符同色池，使按颜色聚类分离字符失效
+                for (int i = 0; i < DARK_OVER_LINE_COUNT; i++) {
+                    g.setColor(CHAR_COLORS[rnd.nextInt(CHAR_COLORS.length)]);
+                    g.setStroke(new BasicStroke(1.2f + rnd.nextFloat() * 0.6f));
+                    g.drawLine(rnd.nextInt(this.width), 10 + rnd.nextInt(this.height - 20),
+                            rnd.nextInt(this.width), 10 + rnd.nextInt(this.height - 20));
+                }
+                // 前景浅色噪点：干扰字符轮廓
+                for (int i = 0; i < FG_DOT_COUNT; i++) {
                     g.setColor(NOISE_COLORS[rnd.nextInt(NOISE_COLORS.length)]);
-                    g.drawLine(rnd.nextInt(this.width), rnd.nextInt(this.height),
-                            rnd.nextInt(this.width), rnd.nextInt(this.height));
+                    g.fillRect(rnd.nextInt(this.width), rnd.nextInt(this.height), 1 + rnd.nextInt(2), 1 + rnd.nextInt(2));
                 }
             } finally {
                 g.dispose();
             }
             return image;
+        }
+
+        /** 正弦波形扭曲：逐列垂直位移（透明像素随列搬运），抗字符骨架/基线提取 */
+        private static BufferedImage waveDistort(BufferedImage src, double amp, double period, double phase) {
+            int w = src.getWidth(), h = src.getHeight();
+            BufferedImage dst = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+            for (int x = 0; x < w; x++) {
+                int dy = (int) Math.round(amp * Math.sin(2 * Math.PI * x / period + phase));
+                for (int y = 0; y < h; y++) {
+                    int ny = y + dy;
+                    if (ny >= 0 && ny < h) {
+                        dst.setRGB(x, ny, src.getRGB(x, y));
+                    }
+                }
+            }
+            return dst;
         }
     }
 

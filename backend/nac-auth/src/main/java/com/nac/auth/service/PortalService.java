@@ -64,18 +64,31 @@ public class PortalService {
         this.loginAttemptService = loginAttemptService;
     }
 
+    /** 安全配置项前缀：防伪/密钥类开关不向匿名接口下发，避免泄露防护状态 */
+    private static final String[] SENSITIVE_PREFIX = {"antiforgery", "portalv2"};
+
     public Map<String, String> config() {
         Map<String, String> map = new HashMap<>();
         try {
             for (PortalConfig c : configMapper.selectAll()) {
-                // 安全：共享密码等敏感项不向匿名（终端）公开接口返回
-                if (c.getConfigKey() != null && c.getConfigKey().toLowerCase().contains("secret")) continue;
+                // 安全：防伪开关/共享密码等敏感项不向匿名（终端）公开接口返回
+                if (isSensitiveKey(c.getConfigKey())) continue;
                 map.put(c.getConfigKey(), c.getConfigValue());
             }
         } catch (Exception e) {
             log.warn("Portal 配置读取失败: {}", e.getMessage());
         }
         return map;
+    }
+
+    private static boolean isSensitiveKey(String key) {
+        if (key == null) return false;
+        String k = key.toLowerCase();
+        if (k.contains("secret")) return true;
+        for (String p : SENSITIVE_PREFIX) {
+            if (k.startsWith(p)) return true;
+        }
+        return false;
     }
 
     /** 防伪推验签：未开启则放行；开启后需 ts/mac/sign 合法（sign=HMAC-SHA256(密码,"ts|mac")，±300s）。 */

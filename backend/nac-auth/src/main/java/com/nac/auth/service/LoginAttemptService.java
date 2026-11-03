@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * 登录失败锁定：同 IP 5次/5min 锁 15min；同账号 10次/5min 锁 30min。
+ * 登录失败锁定：同 IP 5次/5min 锁 15min；同账号 5次/5min 锁 30min。
  * Redis 故障降级为不锁定（允许认证），避免中间件故障导致全员无法登录。
  */
 @Slf4j
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 public class LoginAttemptService {
 
     private static final int IP_MAX_FAIL = 5;
-    private static final int USER_MAX_FAIL = 10;
+    private static final int USER_MAX_FAIL = 5;
     private static final int FAIL_WINDOW = 300;     // 5min
     private static final int IP_LOCK_TTL = 900;    // 15min
     private static final int USER_LOCK_TTL = 1800;  // 30min
