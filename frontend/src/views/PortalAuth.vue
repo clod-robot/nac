@@ -141,13 +141,11 @@ onMounted(async () => {
   form.value.nasIp = pickIfOn(q, 'urlParamNasIp')
   form.value.ssid = pickIfOn(q, 'urlParamSsid')
   form.value.nasName = pickIfOn(q, 'urlParamNasName')
-  // 防伪推：开启后必须验签通过，否则拦截
-  if (String(cfg.value.antiForgeryEnabled) === 'true') {
-    try {
-      const v = await portalVerify({ ts: form.value.ts, mac: form.value.mac, sign: form.value.sign })
-      if (v.data !== true) { blocked.value = true; return }
-    } catch (e) { blocked.value = true; return }
-  }
+  // 防伪推：无条件验签（服务端在开关未开启时返回 true，开启后严格校验；开关状态本身不向匿名端泄露）
+  try {
+    const v = await portalVerify({ ts: form.value.ts, mac: form.value.mac, sign: form.value.sign })
+    if (v.data !== true) { blocked.value = true; return }
+  } catch (e) { blocked.value = true; return }
   if (authType.value !== 'account') loadCaptcha()
 })
 </script>
