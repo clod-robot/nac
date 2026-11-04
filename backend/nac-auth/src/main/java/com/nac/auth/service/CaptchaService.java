@@ -44,10 +44,10 @@ public class CaptchaService {
     private static final int LINE_COUNT = 6;
     /** 压字符的深色干扰线数量：取自字符同色池，破坏按颜色分割字符的 OCR 预处理 */
     private static final int DARK_OVER_LINE_COUNT = 3;
-    /** 背景噪点数量：随机彩色小点，增加背景纹理 */
-    private static final int DOT_COUNT = 40;
+    /** 背景噪点数量：随机彩色小点，增加背景纹理（加密的噪点是主要抗 OCR 手段） */
+    private static final int DOT_COUNT = 150;
     /** 前景噪点数量：撒在字符上方的浅色小点，干扰字符轮廓提取 */
-    private static final int FG_DOT_COUNT = 30;
+    private static final int FG_DOT_COUNT = 60;
     /** 彩色弧线数量：位于字符下方，增加花花绿绿的干扰纹理 */
     private static final int ARC_COUNT = 3;
     /** 单字符渲染缓冲区宽度（> 最大字宽，容纳旋转/扭曲溢出） */
@@ -114,10 +114,9 @@ public class CaptchaService {
     }
 
     /**
-     * 自定义渲染的抗 OCR 验证码：纯白底 + 彩色背景纹理，逐字符独立渲染
-     * （随机字号/深色/大角度旋转）后做正弦波形扭曲，再以「粘连」间距贴合，
-     * 最后压上与字符同色的深色干扰线——破坏二值化、颜色过滤与字符切分
-     * 三类 OCR 预处理，人眼仍可读。
+     * 自定义渲染的抗 OCR 验证码：纯白底 + 密集彩色噪点背景，逐字符独立渲染
+     * （随机字号/深色/适度倾斜）后按「粘连」间距贴合，再压上与字符同色的深色干扰线。
+     * 人眼可读优先：不做波形扭曲，仅保留倾斜与噪点干扰。
      */
     static class ReadableLineCaptcha extends LineCaptcha {
 
@@ -160,7 +159,7 @@ public class CaptchaService {
                     g.fillRect(rnd.nextInt(this.width), rnd.nextInt(this.height), 2, 2);
                 }
 
-                // 逐字符：独立缓冲 → 随机字号/深色/旋转 → 波形扭曲 → 粘连贴合。
+                // 逐字符：独立缓冲 → 随机字号/深色/适度倾斜 → 粘连贴合。
                 // advance < CELL_W 使相邻字符边缘交叠，OCR 难以按空白列切分
                 int len = code.length();
                 int advance = CELL_W - 8 + rnd.nextInt(3);            // 字距 26~28，粘连 6~8px
@@ -183,12 +182,8 @@ public class CaptchaService {
                     } finally {
                         gb.dispose();
                     }
-                    // 正弦波形扭曲：逐列垂直位移，破坏字符基线与骨架提取
-                    BufferedImage warped = waveDistort(buf,
-                            2.5 + rnd.nextDouble() * 1.5,           // 幅度 2.5~4px
-                            20 + rnd.nextInt(12),                   // 周期 20~31px
-                            rnd.nextDouble() * Math.PI * 2);        // 随机相位
-                    g.drawImage(warped, startX + i * advance, rnd.nextInt(5) - 2, null);
+                    // 不做波形扭曲（人眼可读优先），直接贴合
+                    g.drawImage(buf, startX + i * advance, rnd.nextInt(5) - 2, null);
                 }
 
                 // 深色干扰线压字符：与字符同色池，使按颜色聚类分离字符失效
@@ -207,22 +202,6 @@ public class CaptchaService {
                 g.dispose();
             }
             return image;
-        }
-
-        /** 正弦波形扭曲：逐列垂直位移（透明像素随列搬运），抗字符骨架/基线提取 */
-        private static BufferedImage waveDistort(BufferedImage src, double amp, double period, double phase) {
-            int w = src.getWidth(), h = src.getHeight();
-            BufferedImage dst = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-            for (int x = 0; x < w; x++) {
-                int dy = (int) Math.round(amp * Math.sin(2 * Math.PI * x / period + phase));
-                for (int y = 0; y < h; y++) {
-                    int ny = y + dy;
-                    if (ny >= 0 && ny < h) {
-                        dst.setRGB(x, ny, src.getRGB(x, y));
-                    }
-                }
-            }
-            return dst;
         }
     }
 
