@@ -8,6 +8,7 @@ import com.nac.common.result.Result;
 import com.nac.common.security.RequireRole;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -69,5 +70,19 @@ public class SoftwarePolicyController {
                 "enforced", service.enforced(),
                 "mode", service.mode(),
                 "required", service.requiredNames()));
+    }
+
+    /** 在线终端实时合规状态（前端 30s 轮询）：在线会话 + 心跳明细 + 缺失软件。 */
+    @GetMapping("/realtime")
+    @RequireRole
+    @RateLimit(limit = 120, window = 60)
+    public Result<Map<String, Object>> realtime() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("enabled", service.isEnabled());
+        data.put("enforced", service.enforced());
+        data.put("mode", service.mode());
+        data.put("required", service.requiredNames());
+        data.put("rows", service.realtime());
+        return Result.success(data);
     }
 }

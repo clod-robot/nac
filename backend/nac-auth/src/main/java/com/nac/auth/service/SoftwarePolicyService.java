@@ -1,7 +1,11 @@
 package com.nac.auth.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nac.auth.entity.OnlineSession;
 import com.nac.auth.entity.PortalConfig;
 import com.nac.auth.entity.SoftwarePolicy;
+import com.nac.auth.mapper.OnlineSessionMapper;
 import com.nac.auth.mapper.PortalConfigMapper;
 import com.nac.auth.mapper.SoftwarePolicyMapper;
 import com.nac.common.exception.BusinessException;
@@ -12,8 +16,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 终端软件基线策略服务（Portal 侧）：策略 CRUD + 配置热读取 + 心跳合规判定。
@@ -37,6 +43,7 @@ public class SoftwarePolicyService {
 
     private final SoftwarePolicyMapper mapper;
     private final PortalConfigMapper configMapper;
+    private final OnlineSessionMapper onlineMapper;
     private final RedisUtil redisUtil;
 
     private volatile long cfgExpire;
@@ -47,9 +54,11 @@ public class SoftwarePolicyService {
     private volatile long polExpire;
     private volatile List<SoftwareBaseline.Policy> policies = List.of();
 
-    public SoftwarePolicyService(SoftwarePolicyMapper mapper, PortalConfigMapper configMapper, RedisUtil redisUtil) {
+    public SoftwarePolicyService(SoftwarePolicyMapper mapper, PortalConfigMapper configMapper,
+                                 OnlineSessionMapper onlineMapper, RedisUtil redisUtil) {
         this.mapper = mapper;
         this.configMapper = configMapper;
+        this.onlineMapper = onlineMapper;
         this.redisUtil = redisUtil;
     }
 
@@ -206,5 +215,62 @@ public class SoftwarePolicyService {
             if (p.required()) names.add(p.name() == null ? p.processName() : p.name());
         }
         return names;
+    }
+
+    // ---------------- 在线终端实时合规看板 ----------------
+
+    /** 心跳实时明细键（由 nac-radius 写入）。 */
+    private static final String DETAIL_KEY_PREFIX = "nac:swa:detail:";
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /**
+     * 在线终端 + 实时合规状态：在线会话来自 sys_online_session，合规明细来自 Redis 心跳。
+     * 未上报（含已关闭客户端）视为不合规；开关未启用时不做判定（compliant 恒为 true）。
+     */
+    public List<Map<String, Object>> realtime() {
+        boolean enf = enforced();
+        List<OnlineSession> sessions = onlineMapper.listOnline();
+        List<Map<String, Object>> rows = new ArrayList<>(sessions.size());
+        for (OnlineSession s : sessions) {
+            String mac = SoftwareBaseline.normMac(s.getMac());
+            boolean reported = false;
+            boolean compliant = false;
+            Long lastReport = null;
+            String hostname = "";
+            String clientVersion = "";
+            String ip = s.getFramedIp();
+            List<String> missing = List.of();
+            String detailJson = mac.isEmpty() ? null : redisUtil.get(DETAIL_KEY_PREFIX + mac);
+            if (detailJson != null && !detailJson.isEmpty()) {
+                try {
+                    JsonNode d = MAPPER.readTree(detailJson);
+                    reported = true;
+                    compliant = d.path("compliant").asBoolean(false);
+                    if (d.hasNonNull("ts")) lastReport = d.path("ts").asLong();
+                    hostname = d.path("hostname").asText("");
+                    clientVersion = d.path("clientVersion").asText("");
+                    String dip = d.path("ip").asText("");
+                    if (!dip.isEmpty()) ip = dip;
+                    List<String> miss = new ArrayList<>();
+                    for (JsonNode n : d.path("missing")) miss.add(n.asText());
+                    missing = miss;
+                } catch (Exception ex) {
+                    log.warn("软件基线实时明细解析失败: mac={} {}", s.getMac(), ex.getMessage());
+                }
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("username", s.getUsername() != null ? s.getUsername() : s.getUsernameMask());
+            row.put("mac", s.getMac());
+            row.put("ip", ip);
+            row.put("nasIp", s.getNasIp());
+            row.put("reported", reported);
+            row.put("compliant", !enf || (reported && compliant));
+            row.put("missing", missing);
+            row.put("lastReport", lastReport);
+            row.put("hostname", hostname);
+            row.put("clientVersion", clientVersion);
+            rows.add(row);
+        }
+        return rows;
     }
 }
