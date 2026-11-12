@@ -107,6 +107,8 @@ public class EapTlsSupport {
         public boolean peapInnerStarted;   // PEAP：内层 EAP 是否已发起
         public int innerId;                // PEAP：内层 EAP 当前 id
         public byte[] innerChallenge;      // PEAP：内层 MD5 challenge
+        public String swaNonce;            // EAP-TLS：软件基线挑战 nonce（隧道内 Notification）
+        public boolean swaChallenged;      // EAP-TLS：是否已下发软件基线挑战
         long lastSeen = System.currentTimeMillis();
         Session(SSLEngine engine, boolean clientAuth) { this.engine = engine; this.clientAuth = clientAuth; }
     }

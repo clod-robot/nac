@@ -123,8 +123,9 @@ public class GatewayTrustFilter {
                     return;
                 }
                 // WebSocket 路径放行：其鉴权由握手后的 JWT 在处理器内完成（浏览器无法携带网关 HMAC 头）
+                // 终端客户端上报路径放行：终端无法持有网关密钥，改为接口内 HMAC-SHA256 + nonce 防重放校验
                 String uri = req.getRequestURI();
-                if (uri != null && uri.startsWith("/ws/")) {
+                if (uri != null && (uri.startsWith("/ws/") || uri.startsWith("/api/client/"))) {
                     chain.doFilter(request, response);
                     return;
                 }

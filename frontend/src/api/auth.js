@@ -83,6 +83,13 @@ export const exemptCreate = (data) => request.post('/api/auth/admin/exempt-termi
 export const exemptUpdate = (data) => request.put('/api/auth/admin/exempt-terminals', data)
 export const exemptDelete = (id) => request.delete(`/api/auth/admin/exempt-terminals/${id}`)
 
+// 终端软件识别 / 软件基线策略（admin）
+export const softwarePolicyList = () => request.get('/api/auth/admin/software-policies')
+export const softwarePolicyStatus = () => request.get('/api/auth/admin/software-policies/status')
+export const softwarePolicyCreate = (data) => request.post('/api/auth/admin/software-policies', data)
+export const softwarePolicyUpdate = (data) => request.put('/api/auth/admin/software-policies', data)
+export const softwarePolicyDelete = (id) => request.delete(`/api/auth/admin/software-policies/${id}`)
+
 // 系统信息：服务器时间 / NTP（admin）
 export const getSystemInfo = () => request.get('/api/auth/system/info')
 export const setSystemNtp = (data) => request.put('/api/auth/system/ntp', data)

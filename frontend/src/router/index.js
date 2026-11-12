@@ -13,6 +13,7 @@ const routes = [
       { path: 'dashboard', component: () => import('../views/Dashboard.vue') },
       { path: 'user', component: () => import('../views/UserManage.vue'), meta: { roles: ['admin'] } },
       { path: 'exempt-terminals', component: () => import('../views/ExemptTerminals.vue'), meta: { roles: ['admin'] } },
+      { path: 'software-baseline', component: () => import('../views/SoftwareBaseline.vue'), meta: { roles: ['admin'] } },
       { path: 'portal-config', component: () => import('../views/PortalConfig.vue'), meta: { roles: ['admin'] } },
       { path: 'portal-page', component: () => import('../views/PortalCustom.vue'), meta: { roles: ['admin'] } },
       { path: 'system-config', component: () => import('../views/SystemConfig.vue'), meta: { roles: ['admin'] } },

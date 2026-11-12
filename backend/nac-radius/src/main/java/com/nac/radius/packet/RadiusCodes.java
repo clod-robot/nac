@@ -60,6 +60,7 @@ public final class RadiusCodes {
     public static final int EAP_SUCCESS = 3;
     public static final int EAP_FAILURE = 4;
     public static final int EAP_TYPE_IDENTITY = 1;
+    public static final int EAP_TYPE_NOTIFICATION = 2; // RFC 3748 Notification：本项目承载 NAC-SWA 软件基线挑战应答
     public static final int EAP_TYPE_MD5 = 4;
     public static final int EAP_TYPE_TLS = 13;   // EAP-TLS (RFC 5216)
     public static final int EAP_TYPE_PEAP = 25;  // PEAP (RFC 5216 隧道)

@@ -37,7 +37,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
-    @Value("${nac.gateway.whitelist:/api/auth/login,/api/auth/captcha/**,/api/auth/sms/send,/api/auth/sms/login,/api/portal/auth,/free-auth/check}")
+    @Value("${nac.gateway.whitelist:/api/auth/login,/api/auth/captcha/**,/api/auth/sms/send,/api/auth/sms/login,/api/portal/auth,/api/client/**,/free-auth/check}")
     private String whitelist;
 
     private final AntPathMatcher matcher = new AntPathMatcher();

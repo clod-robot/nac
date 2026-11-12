@@ -46,12 +46,13 @@ public class PortalService {
     private final SyslogForwarder syslogForwarder;
     private final PasswordEncoder passwordEncoder;
     private final LoginAttemptService loginAttemptService;
+    private final SoftwarePolicyService softwarePolicyService;
 
     public PortalService(PortalConfigMapper configMapper, AuthLogMapper authLogMapper, OnlineSessionMapper onlineSessionMapper,
                          SysUserMapper sysUserMapper,
                          SmsService smsService, RedisUtil redisUtil, ExemptTerminalService exemptService,
                          SyslogForwarder syslogForwarder, PasswordEncoder passwordEncoder,
-                         LoginAttemptService loginAttemptService) {
+                         LoginAttemptService loginAttemptService, SoftwarePolicyService softwarePolicyService) {
         this.configMapper = configMapper;
         this.authLogMapper = authLogMapper;
         this.onlineSessionMapper = onlineSessionMapper;
@@ -62,10 +63,11 @@ public class PortalService {
         this.syslogForwarder = syslogForwarder;
         this.passwordEncoder = passwordEncoder;
         this.loginAttemptService = loginAttemptService;
+        this.softwarePolicyService = softwarePolicyService;
     }
 
-    /** 安全配置项前缀：防伪/密钥类开关不向匿名接口下发，避免泄露防护状态 */
-    private static final String[] SENSITIVE_PREFIX = {"antiforgery", "portalv2"};
+    /** 安全配置项前缀：防伪/密钥/软件基线开关不向匿名接口下发，避免泄露防护状态 */
+    private static final String[] SENSITIVE_PREFIX = {"antiforgery", "portalv2", "softwarebaseline"};
 
     public Map<String, String> config() {
         Map<String, String> map = new HashMap<>();
@@ -164,6 +166,8 @@ public class PortalService {
             log.info("Portal 免认证放行: ip={} mac={}", ip, mac);
             return token;
         }
+        // 终端软件基线：策略生效时要求该终端有合规心跳（由 802.1X 客户端定时上报）
+        softwarePolicyService.assertCompliant(mac, ip);
         try {
             smsService.verifyCode(phone, code);
         } catch (RuntimeException e) {
@@ -203,6 +207,8 @@ public class PortalService {
             upsertOnline(username, mac, ip, nasIp, ssid, nasName);
             return token;
         }
+        // 终端软件基线：策略生效时要求该终端有合规心跳（由 802.1X 客户端定时上报）
+        softwarePolicyService.assertCompliant(mac, ip);
         if (username == null || username.isBlank() || password == null) {
             throw new BusinessException(ResultCode.USERNAME_OR_PASSWORD_ERROR);
         }
