@@ -39,7 +39,7 @@ spring:
         - id: nac-radius
           uri: lb://nac-radius
           predicates:
-            - Path=/api/radius/**
+            - Path=/api/radius/**,/api/client/**
         - id: nac-log
           uri: lb://nac-log
           predicates:

@@ -3,6 +3,7 @@ package com.nac.radius.service;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.security.AesCryptoUtil;
 import com.nac.common.syslog.SyslogForwarder;
+import com.nac.common.software.SoftwareBaseline;
 import com.nac.radius.config.RadiusProperties;
 import com.nac.radius.entity.AuthLog;
 import com.nac.radius.entity.RadiusUser;
@@ -44,13 +45,17 @@ public class RadiusAuthService {
     private final ExemptTerminalMapper exemptMapper;
     private final SyslogForwarder syslogForwarder;
     private final EapTlsSupport eapTlsSupport;
+    private final SoftwareBaselineService softwareBaseline;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    /** EAP-TLS 隧道内软件基线的内层 EAP 标识（独立于外层 Request id） */
+    private static final int SWA_INNER_EAP_ID = 201;
 
     public RadiusAuthService(RadiusUserMapper userMapper, AuthLogMapper authLogMapper, NasMapper nasMapper,
                              RedisUtil redisUtil, AesCryptoUtil aesCryptoUtil, RadiusProperties props,
                              RadiusSecretService secretService, ExemptTerminalMapper exemptMapper,
-                             SyslogForwarder syslogForwarder, EapTlsSupport eapTlsSupport) {
+                             SyslogForwarder syslogForwarder, EapTlsSupport eapTlsSupport,
+                             SoftwareBaselineService softwareBaseline) {
         this.userMapper = userMapper;
         this.authLogMapper = authLogMapper;
         this.nasMapper = nasMapper;
@@ -61,6 +66,7 @@ public class RadiusAuthService {
         this.exemptMapper = exemptMapper;
         this.syslogForwarder = syslogForwarder;
         this.eapTlsSupport = eapTlsSupport;
+        this.softwareBaseline = softwareBaseline;
     }
 
     /** 用户查询短 TTL 缓存：EAP-TLS 握手有十几次往返，避免每轮都查库（降延迟 + 减 DB 负载）。 */
@@ -182,6 +188,15 @@ public class RadiusAuthService {
             return reject;
         }
 
+        // 终端软件基线：PAP/CHAP 无法做 EAP 挑战应答，按客户端心跳（实时上报）合规状态判定
+        if (softwareBaseline.enforced() && !softwareBaseline.isCompliant(callingMac)) {
+            registerFailure(username);
+            reject.addString(RadiusCodes.REPLY_MESSAGE, "software baseline not satisfied");
+            recordAuth(request, 0, "软件基线不满足");
+            log.info("RADIUS 认证拒绝(软件基线): user={} mac={}", mask(username), callingMac);
+            return reject;
+        }
+
         // 成功：清失败计数，构造 Accept + 授权属性
         clearFailures(username);
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
@@ -256,15 +271,16 @@ public class RadiusAuthService {
                 return eapReject(request, user, "invalid credentials", id);
             }
             clearFailures(user.getUsername());
-            RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
-            putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
-            accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
-            addVlan(accept, effectiveVlan(user));
-            accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(user.getUsername()));
-            accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
-            recordAuth(request, 1, "EAP-MD5 认证成功");
-            log.info("RADIUS EAP-MD5 认证成功: user={} nas={}", mask(user.getUsername()), nasIpOf(request));
-            return accept;
+            // 终端软件基线：口令通过后追加 NAC-SWA 挑战（客户端枚举进程+文件哈希并签名回传）
+            if (softwareBaseline.enforced()) {
+                return swaChallenge(request, user, id);
+            }
+            return eapAccept(request, user, id, "EAP-MD5");
+        }
+
+        // Response/Notification -> 软件基线挑战应答（NAC-SWA v1）
+        if (code == RadiusCodes.EAP_RESPONSE && type == RadiusCodes.EAP_TYPE_NOTIFICATION) {
+            return handleSwaResponse(request, user, eap, id);
         }
 
         // Response/EAP-TLS 或 PEAP -> 驱动 TLS 握手
@@ -320,12 +336,21 @@ public class RadiusAuthService {
             if (peap && s.handshakeDone && r.appData() != null) {
                 return handlePeapInner(request, user, s, sid, r.appData(), id);
             }
+            // EAP-TLS：隧道内软件基线应答（客户端回传后校验）
+            if (!peap && s.swaChallenged && r.appData() != null && r.appData().length > 0) {
+                return handleTlsSwaResponse(request, user, s, sid, r.appData(), id);
+            }
             if (r.success()) {
                 if (peap) {
                     // 先下发服务端 Finished，保持会话，待 ACK 完再发起内层 EAP
                     enqueueWrapped(s, sid, r.outgoingTls());
                     byte[] frag = s.outFrags.isEmpty() ? new byte[0] : s.outFrags.poll();
                     return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId, tlvData(eapType, frag)));
+                }
+                // EAP-TLS：握手成功后若启用软件基线，先在隧道内下发 NAC-SWA 挑战再放行
+                if (softwareBaseline.enforced()) {
+                    enqueueWrapped(s, sid, r.outgoingTls());
+                    return startTlsSwaChallenge(request, user, s, sid, eapType, reqId);
                 }
                 eapTlsSupport.remove(sid);
                 return tlsAccept(request, user);
@@ -353,6 +378,41 @@ public class RadiusAuthService {
     private void enqueueWrapped(EapTlsSupport.Session s, String sid, byte[] netTls) {
         if (netTls == null) netTls = new byte[0];
         for (byte[] f : eapTlsSupport.fragmentForEap(netTls)) s.outFrags.add(f);
+    }
+
+    /** EAP-TLS 隧道内下发软件基线挑战（TLS 应用数据包裹 EAP-Request/Notification）。 */
+    private RadiusPacket startTlsSwaChallenge(RadiusPacket request, RadiusUser user, EapTlsSupport.Session s,
+                                              String sid, int eapType, int reqId) throws Exception {
+        String mac = request.getString(RadiusCodes.CALLING_STATION_ID);
+        String nonce = softwareBaseline.createChallenge(mac, user.getUsername());
+        s.swaNonce = nonce;
+        s.swaChallenged = true;
+        String text = SoftwareBaseline.buildChallenge(nonce, softwareBaseline.challengeNames());
+        byte[] inner = eapPacket(RadiusCodes.EAP_REQUEST, SWA_INNER_EAP_ID,
+                tlvData(RadiusCodes.EAP_TYPE_NOTIFICATION, text.getBytes(StandardCharsets.UTF_8)));
+        enqueueWrapped(s, sid, eapTlsSupport.wrapApp(sid, inner));
+        byte[] frag = s.outFrags.isEmpty() ? new byte[0] : s.outFrags.poll();
+        log.debug("RADIUS EAP-TLS 下发软件基线挑战: user={} mac={}", mask(user.getUsername()), mac);
+        return tlsChallenge(request, sid, eapPacket(RadiusCodes.EAP_REQUEST, reqId, tlvData(eapType, frag)));
+    }
+
+    /** EAP-TLS 隧道内软件基线应答校验：通过则 Accept，否则 Reject。 */
+    private RadiusPacket handleTlsSwaResponse(RadiusPacket request, RadiusUser user, EapTlsSupport.Session s,
+                                              String sid, byte[] appData, int id) {
+        // appData 为内层 EAP 报文（code/id/len/type/typeData），取 typeData 部分
+        String text = appData.length > 5
+                ? new String(appData, 5, appData.length - 5, StandardCharsets.UTF_8) : "";
+        SoftwareBaselineService.Result r = softwareBaseline.verifyEapResponse(
+                s.swaNonce, request.getString(RadiusCodes.CALLING_STATION_ID), text);
+        eapTlsSupport.remove(sid);
+        if (!r.ok()) {
+            softwareBaseline.consumeChallenge(s.swaNonce);
+            registerFailure(user.getUsername());
+            log.info("RADIUS 软件基线拒绝: user={} mac={} 原因={}", mask(user.getUsername()),
+                    request.getString(RadiusCodes.CALLING_STATION_ID), r.message());
+            return eapReject(request, user, "software baseline: " + r.message(), id);
+        }
+        return tlsAccept(request, user, "EAP-TLS+SWA");
     }
 
     /** EAP-TLS 成功：EAP-Success + 授权属性。 */
@@ -417,11 +477,68 @@ public class RadiusAuthService {
                 registerFailure(user.getUsername());
                 return eapReject(request, user, "invalid credentials", id);
             }
+            // 终端软件基线：PEAP 内层走心跳合规判定（内层隧道不做额外挑战，避免破坏 TLS 状态机）
+            if (softwareBaseline.enforced()
+                    && !softwareBaseline.isCompliant(request.getString(RadiusCodes.CALLING_STATION_ID))) {
+                eapTlsSupport.remove(sid);
+                registerFailure(user.getUsername());
+                return eapReject(request, user, "software baseline not satisfied", id);
+            }
             eapTlsSupport.remove(sid);
             return tlsAccept(request, user, "PEAP");
         }
         eapTlsSupport.remove(sid);
         return eapReject(request, user, "peap inner unsupported", id);
+    }
+
+    /**
+     * 下发软件基线挑战：EAP-Request/Notification，typeData = NAC-SWA:1:nonce:软件名列表；
+     * State 携带 nonce（NAS 原样回传），避免服务端保存会话状态。
+     */
+    private RadiusPacket swaChallenge(RadiusPacket request, RadiusUser user, int eapId) {
+        String mac = request.getString(RadiusCodes.CALLING_STATION_ID);
+        String nonce = softwareBaseline.createChallenge(mac, user.getUsername());
+        String text = SoftwareBaseline.buildChallenge(nonce, softwareBaseline.challengeNames());
+        int reqId = (eapId + 1) & 0xFF;
+        RadiusPacket ch = new RadiusPacket(RadiusCodes.ACCESS_CHALLENGE, request.getIdentifier(), null);
+        putEap(ch, eapTypeOf(request), eapPacket(RadiusCodes.EAP_REQUEST, reqId,
+                tlvData(RadiusCodes.EAP_TYPE_NOTIFICATION, text.getBytes(StandardCharsets.UTF_8))));
+        ch.addAttribute(RadiusCodes.STATE, nonce.getBytes(StandardCharsets.UTF_8));
+        ch.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+        log.debug("RADIUS 下发软件基线挑战: user={} mac={}", mask(user.getUsername()), mac);
+        return ch;
+    }
+
+    /** 校验软件基线应答（签名 + 策略），通过则 Accept，否则 Reject。 */
+    private RadiusPacket handleSwaResponse(RadiusPacket request, RadiusUser user, byte[] eap, int eapId) {
+        byte[] state = request.getAttr(RadiusCodes.STATE);
+        if (state == null || state.length < 16) return eapReject(request, user, "missing swa state", eapId);
+        String nonce = new String(state, StandardCharsets.UTF_8).trim();
+        String text = eap.length > 5 ? new String(eap, 5, eap.length - 5, StandardCharsets.UTF_8) : "";
+        SoftwareBaselineService.Result r = softwareBaseline.verifyEapResponse(
+                nonce, request.getString(RadiusCodes.CALLING_STATION_ID), text);
+        softwareBaseline.consumeChallenge(nonce);
+        if (!r.ok()) {
+            registerFailure(user.getUsername());
+            log.info("RADIUS 软件基线拒绝: user={} mac={} 原因={}",
+                    mask(user.getUsername()), request.getString(RadiusCodes.CALLING_STATION_ID), r.message());
+            return eapReject(request, user, "software baseline: " + r.message(), eapId);
+        }
+        return eapAccept(request, user, eapId, "EAP-SWA");
+    }
+
+    /** 统一构造 EAP 认证成功响应（EAP-Success + 会话超时 + VLAN 授权）。 */
+    private RadiusPacket eapAccept(RadiusPacket request, RadiusUser user, int eapId, String method) {
+        clearFailures(user.getUsername());
+        RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
+        putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, eapId, null));
+        accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
+        addVlan(accept, effectiveVlan(user));
+        accept.addString(RadiusCodes.REPLY_MESSAGE, "Welcome " + mask(user.getUsername()));
+        accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+        recordAuth(request, 1, method + " 认证成功");
+        log.info("RADIUS {} 认证成功: user={} nas={}", method, mask(user.getUsername()), nasIpOf(request));
+        return accept;
     }
 
     private RadiusPacket tlsChallenge(RadiusPacket request, String sid, byte[] eapReq) {

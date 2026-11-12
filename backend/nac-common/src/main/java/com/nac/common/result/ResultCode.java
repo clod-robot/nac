@@ -21,7 +21,8 @@ public enum ResultCode {
     SMS_DAILY_LIMIT(1007, "今日短信发送次数已达上限"),
     SMS_GATEWAY_ERROR(1008, "短信网关发送失败"),
     IDEMPOTENT_REPEAT(1009, "请勿重复提交"),
-    PHONE_FORMAT_ERROR(1010, "手机号格式错误");
+    PHONE_FORMAT_ERROR(1010, "手机号格式错误"),
+    SOFTWARE_BASELINE_REQUIRED(1011, "终端软件基线不满足：请运行指定软件并开启认证客户端");
 
     private final int code;
     private final String message;
