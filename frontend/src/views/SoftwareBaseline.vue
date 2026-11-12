@@ -22,6 +22,48 @@
         title="判定依据：802.1X 客户端实时上报进程名 + 可执行文件 SHA256；进程名匹配且（如配置）哈希一致才算命中，可防御同名替换伪装。终端未安装/未运行认证客户端时无法通过认证。" />
     </el-card>
 
+    <el-card v-loading="rtLoading" style="margin-bottom:12px">
+      <template #header>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>在线终端实时合规状态</span>
+          <div>
+            <span class="tip" style="margin-right:12px">每 30 秒自动刷新 · 最近刷新 {{ lastRefresh || '-' }}</span>
+            <el-button size="small" @click="loadRealtime">立即刷新</el-button>
+          </div>
+        </div>
+      </template>
+      <el-alert v-if="!rt.enforced" type="info" :closable="false" show-icon
+        title="策略未生效：不进行合规判定。启用并配置必需软件后，未运行指定软件的终端将被标记为不合规并断开网络。" />
+      <el-table :data="rt.rows" border stripe size="small" style="margin-top:10px">
+        <el-table-column prop="username" label="账号" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="mac" label="MAC" width="150" />
+        <el-table-column prop="ip" label="IP" width="130" />
+        <el-table-column prop="hostname" label="主机名" min-width="130" show-overflow-tooltip />
+        <el-table-column label="合规状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.compliant ? 'success' : 'danger'" size="small">
+              {{ row.compliant ? '合规' : (row.reported ? '不合规' : '未上报') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="缺失软件" min-width="180">
+          <template #default="{ row }">
+            <template v-if="(row.missing || []).length">
+              <el-tag v-for="m in row.missing" :key="m" type="danger" size="small" style="margin-right:4px">{{ m }}</el-tag>
+            </template>
+            <span v-else class="tip">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="客户端" width="110">
+          <template #default="{ row }">{{ row.clientVersion || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="最近上报" width="170">
+          <template #default="{ row }">{{ fmtTime(row.lastReport) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!rt.rows.length" description="暂无在线终端" :image-size="60" />
+    </el-card>
+
     <el-card v-loading="loading">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -110,11 +152,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   softwarePolicyList, softwarePolicyStatus, softwarePolicyCreate, softwarePolicyUpdate, softwarePolicyDelete,
-  updatePortalConfig
+  softwarePolicyRealtime, updatePortalConfig
 } from '../api/auth'
 
 const loading = ref(false)
@@ -127,7 +169,38 @@ const mode = ref('ANY')
 const dlg = ref(false)
 const form = reactive({ id: null, name: '', processName: '', sha256: '', matchMode: 'PROCESS', required: 1, enabled: 1, remark: '' })
 
-onMounted(load)
+// 在线终端实时合规状态
+const rtLoading = ref(false)
+const rt = reactive({ enforced: false, mode: 'ANY', required: [], rows: [] })
+const lastRefresh = ref('')
+let rtTimer = null
+
+onMounted(() => {
+  load()
+  loadRealtime()
+  rtTimer = setInterval(loadRealtime, 30000)
+})
+onUnmounted(() => { if (rtTimer) clearInterval(rtTimer) })
+
+function fmtTime(sec) {
+  if (!sec) return '-'
+  const d = new Date(Number(sec) * 1000)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+async function loadRealtime() {
+  rtLoading.value = true
+  try {
+    const r = await softwarePolicyRealtime()
+    const d = r.data || {}
+    rt.enforced = !!d.enforced
+    rt.mode = d.mode || 'ANY'
+    rt.required = d.required || []
+    rt.rows = d.rows || []
+    lastRefresh.value = fmtTime(Math.floor(Date.now() / 1000))
+  } finally { rtLoading.value = false }
+}
 
 async function load() {
   loading.value = true

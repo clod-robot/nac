@@ -89,6 +89,7 @@ export const softwarePolicyStatus = () => request.get('/api/auth/admin/software-
 export const softwarePolicyCreate = (data) => request.post('/api/auth/admin/software-policies', data)
 export const softwarePolicyUpdate = (data) => request.put('/api/auth/admin/software-policies', data)
 export const softwarePolicyDelete = (id) => request.delete(`/api/auth/admin/software-policies/${id}`)
+export const softwarePolicyRealtime = () => request.get('/api/auth/admin/software-policies/realtime')
 
 // 系统信息：服务器时间 / NTP（admin）
 export const getSystemInfo = () => request.get('/api/auth/system/info')

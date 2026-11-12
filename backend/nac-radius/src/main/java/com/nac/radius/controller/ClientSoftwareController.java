@@ -1,12 +1,16 @@
 package com.nac.radius.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nac.common.ratelimit.RateLimit;
+import com.nac.common.redis.RedisUtil;
 import com.nac.common.result.Result;
+import com.nac.common.software.SoftwareBaseline;
 import com.nac.radius.dto.SoftwareReportReq;
 import com.nac.radius.service.SoftwareBaselineService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +26,17 @@ import java.util.Map;
 @RequestMapping("/api/client")
 public class ClientSoftwareController {
 
-    private final SoftwareBaselineService baselineService;
+    /** 实时明细键（供管理端「在线终端合规状态」展示），TTL 略大于心跳周期。 */
+    private static final String DETAIL_KEY_PREFIX = "nac:swa:detail:";
+    private static final int DETAIL_TTL = 120;
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public ClientSoftwareController(SoftwareBaselineService baselineService) {
+    private final SoftwareBaselineService baselineService;
+    private final RedisUtil redis;
+
+    public ClientSoftwareController(SoftwareBaselineService baselineService, RedisUtil redis) {
         this.baselineService = baselineService;
+        this.redis = redis;
     }
 
     /** 下发当前策略要求的软件名（不含哈希），供客户端采集与心跳使用。 */
@@ -48,11 +59,36 @@ public class ClientSoftwareController {
         if (!r.ok()) {
             log.info("软件基线上报不合规: mac={} 原因={}", req == null ? null : req.getMac(), r.message());
         }
+        recordDetail(req, r);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("ok", r.ok());
         data.put("message", r.message());
         data.put("missing", r.missing());
         data.put("reported", r.reported());
         return Result.success(data);
+    }
+
+    /** 写实时明细（管理端看板读取）：合规状态、缺失软件、最近上报时间。 */
+    private void recordDetail(SoftwareReportReq req, SoftwareBaselineService.Result r) {
+        if (req == null) return;
+        try {
+            String mac = SoftwareBaseline.normMac(req.getMac());
+            if (mac.isEmpty()) return;
+            Map<String, Object> d = new LinkedHashMap<>();
+            d.put("ts", System.currentTimeMillis() / 1000);
+            d.put("ip", req.getIp());
+            d.put("hostname", req.getHostname());
+            d.put("clientVersion", req.getClientVersion());
+            d.put("compliant", r.ok());
+            d.put("missing", r.missing());
+            List<String> names = new ArrayList<>();
+            if (req.getSoftware() != null) {
+                for (SoftwareReportReq.SoftwareItem it : req.getSoftware()) names.add(it.getName());
+            }
+            d.put("names", names);
+            redis.set(DETAIL_KEY_PREFIX + mac, MAPPER.writeValueAsString(d), DETAIL_TTL);
+        } catch (Exception e) {
+            log.warn("写软件基线实时明细失败: {}", e.getMessage());
+        }
     }
 }
