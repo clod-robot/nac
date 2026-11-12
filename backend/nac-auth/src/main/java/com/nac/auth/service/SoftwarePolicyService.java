@@ -181,9 +181,20 @@ public class SoftwarePolicyService {
         return policies;
     }
 
-    /** 存在启用且标记为必须的策略才真正阻断认证。 */
+    /**
+     * 存在启用且标记为必须的策略才真正阻断认证。
+     *
+     * <p>同时要求共享密钥非空：密钥缺失时客户端无法生成合法签名，若仍阻断将导致 Portal
+     * 全员被拒（1011）而 802.1X 侧跳过校验放行，两端判定不一致。此处与 nac-radius
+     * 的 {@code enforced()} 保持同一口径：缺密钥视为未启用。</p>
+     */
     public boolean enforced() {
         if (!isEnabled()) return false;
+        String s = secret();
+        if (s == null || s.isBlank()) {
+            log.warn("软件基线已开启但未配置共享密钥，跳过校验（避免全员断网）");
+            return false;
+        }
         for (SoftwareBaseline.Policy p : enabledPolicies()) {
             if (p.required()) return true;
         }
