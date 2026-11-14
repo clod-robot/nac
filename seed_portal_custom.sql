@@ -1,0 +1,14 @@
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'siteName','默认站点','站点名称(1-32)' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='siteName');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'title','网络准入认证','页面标题(1-32)' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='title');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'notice','欢迎','公告栏(1-128)' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='notice');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'logo','','LOGO图片URL' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='logo');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'carousel','','轮播图片URL列表(逗号分隔)' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='carousel');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'bgType','color','背景类型(image=图片, color=纯色)' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='bgType');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'bgImage','','背景图片URL' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='bgImage');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'bgColor','#0b5cab','背景纯色' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='bgColor');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'copyright','','版权信息(1-100)' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='copyright');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'anonymousAuth','false','免认证认证开关(true=开启)' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='anonymousAuth');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'userGroup','','认证用户组' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='userGroup');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'buttonText','登录','认证按钮文字' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='buttonText');
+INSERT INTO sys_portal_config (config_key, config_value, remark) SELECT 'ssid','','应用SSID' WHERE NOT EXISTS (SELECT 1 FROM sys_portal_config WHERE config_key='ssid');
+SELECT config_key, config_value FROM sys_portal_config WHERE config_key IN ('siteName','title','notice','bgType','bgColor','buttonText','anonymousAuth') ORDER BY config_key;

@@ -36,3 +36,51 @@ jiumen/
 *.key
 config/application-local.yml
 application-prod.yml
+
+# ===== 本机临时工作区（非 nac 项目源码，不入库，文件仍保留在磁盘） =====
+# 其他项目/大体积资产
+/novawaf/
+/netguard/
+/threat_intel/
+/ConcordRTS/
+/Ra2Remastered/
+/assets/
+/assets.zip
+/dist/
+/release/
+/work/
+/bench/
+/vxldump/
+/yuri_re/
+/reports/
+/docs/
+/.acceltmp/
+/.pkg-src/
+/.trae-html-share-packages/
+/maven.tgz
+/engine_src.tar.gz
+/backend-src.tgz
+/novawaf-release.tar.gz
+/nac-frontend-dist.zip
+/audio_head.bin
+/Game_patched.exe
+
+# 根目录一次性分析脚本 / 截图 / 中间产物
+/*.py
+/*.ps1
+/*.sh
+/*.png
+/*.txt
+/*.json
+/*.bin
+/*.reg
+/*.tgz
+/*.zip
+/*.tar.gz
+/*.exe
+/*.md
+/*.xlsx
+
+# 其他项目的 spec 文档（novawaf）
+/.trae/specs/novawaf-*/
+/.trae/documents/*.md
