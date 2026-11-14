@@ -6,6 +6,8 @@ import com.nac.auth.entity.IsolationConfig;
 import com.nac.auth.entity.IsolationRecord;
 import com.nac.auth.mapper.IsolationRecordMapper;
 import com.nac.common.exception.BusinessException;
+import com.nac.common.coa.CoaProtocol;
+import com.nac.common.coa.CoaQueue;
 import com.nac.common.isolation.IsolationProtocol;
 import com.nac.common.redis.RedisUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +73,9 @@ public class IsolationRecordService {
         if (n > 0) {
             redis.delete(IsolationProtocol.stateKey(r.getMac()));
             log.info("隔离记录人工释放: id={} mac={}", id, r.getMac());
+            // 在线会话需重新认证才能恢复正式 ACL/VLAN
+            coa(r.getMac(), CoaProtocol.ACTION_DISCONNECT, "NORMAL", null, null,
+                    cause == null || cause.isBlank() ? "管理员人工释放" : cause);
         }
     }
 
@@ -93,11 +98,24 @@ public class IsolationRecordService {
         List<String> missing = parseMissing(r.getMissingJson());
         mapper.updateZone(r);
         int created = remediationService.createTasks(r, missing);
+        coa(r.getMac(), CoaProtocol.ACTION_AUTH_CHANGE, IsolationProtocol.ZONE_REMEDIATION,
+                r.getChannelType(), r.getChannelValue(), "管理员转入修复区");
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("record", r);
         out.put("createdTasks", created);
         out.put("tasks", remediationService.tasksByRecord(r.getId()));
         return out;
+    }
+
+    /** 投递动态授权命令（由 nac-radius 消费执行；未开启 CoA 时消费者直接丢弃）。 */
+    private void coa(String mac, String action, String zone, String channelType,
+                     String channelValue, String reason) {
+        try {
+            CoaQueue.enqueue(redis, new CoaProtocol.Command(IsolationProtocol.normalizeMac(mac),
+                    action, zone, channelType, channelValue, reason, System.currentTimeMillis()));
+        } catch (Exception e) {
+            log.debug("CoA 投递失败(忽略): mac={} {}", mac, e.getMessage());
+        }
     }
 
     private IsolationRecord find(Long id) {

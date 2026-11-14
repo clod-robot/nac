@@ -63,6 +63,60 @@ public final class RadiusCodec {
         return out;
     }
 
+    /**
+     * 编码动态授权请求（RFC 5176：CoA-Request code=43 / Disconnect-Request code=40）。
+     *
+     * <p>Request Authenticator = MD5(Code + ID + Length + 16×0 + Attributes + Secret)，
+     * 与响应不同，请求的认证符必须由属性参与计算，否则 NAS 直接丢弃。</p>
+     *
+     * @param withMessageAuthenticator 为 true 时追加 Message-Authenticator(80)：
+     *                                 先算 Request Authenticator，再按 RFC 3579 用该认证符回填 HMAC-MD5
+     */
+    public static byte[] encodeRequest(byte code, byte identifier, RadiusPacket packet,
+                                       String sharedSecret, boolean withMessageAuthenticator) {
+        if (withMessageAuthenticator) {
+            // 16 字节零占位，长度参与 RA 计算，稍后原地回填
+            packet.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[AUTH_LEN]);
+        }
+        byte[] attrs = encodeAttributes(packet);
+        int total = RadiusCodes.HEADER_LEN + attrs.length;
+        byte[] out = new byte[total];
+        out[0] = code;
+        out[1] = identifier;
+        out[2] = (byte) (total >>> 8);
+        out[3] = (byte) total;
+        // 认证符字段保持 16×0 参与计算
+        System.arraycopy(attrs, 0, out, 20, attrs.length);
+        byte[] ra = md5(concat(out, sharedSecret.getBytes(StandardCharsets.UTF_8)));
+        System.arraycopy(ra, 0, out, 4, AUTH_LEN);
+        if (withMessageAuthenticator) {
+            // 此时 MA 占位为 0、RA 已就位，按 RFC 3579 计算 HMAC-MD5 回填
+            try {
+                Mac mac = Mac.getInstance("HmacMD5");
+                mac.init(new SecretKeySpec(sharedSecret.getBytes(StandardCharsets.UTF_8), "HmacMD5"));
+                byte[] hmac = mac.doFinal(out);
+                int maOff = findMessageAuthenticator(out);
+                if (maOff > 0) System.arraycopy(hmac, 0, out, maOff, AUTH_LEN);
+            } catch (Exception e) {
+                throw new IllegalStateException("HmacMD5 unavailable", e);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 校验动态授权应答的 Response Authenticator（RFC 5176 §2.3）：
+     * MD5(Code + ID + Length + RequestAuth + Attributes + Secret) 必须等于应答认证符。
+     */
+    public static boolean verifyResponseAuthenticator(byte[] response, byte[] requestAuthenticator,
+                                                      String sharedSecret) {
+        if (response == null || response.length < RadiusCodes.HEADER_LEN) return false;
+        byte[] copy = response.clone();
+        System.arraycopy(requestAuthenticator, 0, copy, 4, AUTH_LEN);
+        byte[] expect = md5(concat(copy, sharedSecret.getBytes(StandardCharsets.UTF_8)));
+        return MessageDigest.isEqual(expect, Arrays.copyOfRange(response, 4, 20));
+    }
+
     /** 在已填充 Response-Authenticator 的报文上计算并回填 Message-Authenticator（HMAC-MD5）。 */
     private static void fillMessageAuthenticator(byte[] out, String sharedSecret) {
         int maOff = findMessageAuthenticator(out);

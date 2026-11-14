@@ -6,6 +6,7 @@ import com.nac.common.ratelimit.RateLimit;
 import com.nac.common.result.Result;
 import com.nac.common.security.RequireRole;
 import com.nac.radius.eap.CertManager;
+import com.nac.radius.service.CoaService;
 import com.nac.radius.service.RadiusConfigService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -25,10 +26,13 @@ public class RadiusConfigController {
 
     private final RadiusConfigService configService;
     private final CertManager certManager;
+    private final CoaService coaService;
 
-    public RadiusConfigController(RadiusConfigService configService, CertManager certManager) {
+    public RadiusConfigController(RadiusConfigService configService, CertManager certManager,
+                                  CoaService coaService) {
         this.configService = configService;
         this.certManager = certManager;
+        this.coaService = coaService;
     }
 
     /** 读取当前配置：分片大小（当前/默认/区间/建议）+ CA/服务端证书信息。 */
@@ -80,6 +84,29 @@ public class RadiusConfigController {
         return org.springframework.http.ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=nac-ca.pem")
                 .body(certManager.getCaCertPem());
+    }
+
+    /** 动态授权（RFC 5176）当前生效配置与待执行队列深度。 */
+    @GetMapping("/coa")
+    @RequireRole
+    @RateLimit(limit = 60, window = 60)
+    public Result<Map<String, Object>> coa() {
+        return Result.success(coaService.view());
+    }
+
+    /**
+     * 手动下发一次 CoA / Disconnect（现场验证交换机是否支持 RFC 5176）。
+     * body: mac, action=DISCONNECT|AUTH_CHANGE, zone, channelType=ACL|VLAN, channelValue。
+     */
+    @PostMapping("/coa/test")
+    @RequireRole
+    @RateLimit(limit = 20, window = 60)
+    @OperationLog("测试 RADIUS 动态授权")
+    public Result<Map<String, Object>> coaTest(@RequestBody Map<String, String> body) {
+        String mac = body.get("mac");
+        if (mac == null || mac.isBlank()) throw new BusinessException(400, "mac 不能为空");
+        return Result.success(coaService.sendNow(mac, body.get("action"), body.get("zone"),
+                body.get("channelType"), body.get("channelValue")));
     }
 
     private static String read(MultipartFile f, String name) {

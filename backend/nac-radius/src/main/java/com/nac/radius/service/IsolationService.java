@@ -1,6 +1,7 @@
 package com.nac.radius.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nac.common.coa.CoaProtocol;
 import com.nac.common.isolation.IsolationProtocol;
 import com.nac.common.redis.RedisUtil;
 import com.nac.radius.entity.*;
@@ -40,6 +41,7 @@ public class IsolationService {
     private final RemediationTaskMapper taskMapper;
     private final PopupTemplateMapper popupMapper;
     private final RedisUtil redis;
+    private final CoaService coaService;
 
     private volatile IsolationConfig cached;
     private volatile long expireAt;
@@ -47,7 +49,7 @@ public class IsolationService {
     public IsolationService(IsolationConfigMapper configMapper, IsolationRecordMapper recordMapper,
                             RemediationRuleMapper ruleMapper, PatchLibraryMapper patchMapper,
                             AvLibraryMapper avMapper, RemediationTaskMapper taskMapper,
-                            PopupTemplateMapper popupMapper, RedisUtil redis) {
+                            PopupTemplateMapper popupMapper, RedisUtil redis, CoaService coaService) {
         this.configMapper = configMapper;
         this.recordMapper = recordMapper;
         this.ruleMapper = ruleMapper;
@@ -56,6 +58,7 @@ public class IsolationService {
         this.taskMapper = taskMapper;
         this.popupMapper = popupMapper;
         this.redis = redis;
+        this.coaService = coaService;
     }
 
     // ---------------- 配置 ----------------
@@ -157,6 +160,8 @@ public class IsolationService {
                 recordMapper.updateZoneAndTouch(r);
             }
             writeState(m, r.getZone(), IsolationProtocol.STATUS_ACTIVE, reason, ch.value());
+            // 在线会话需立即生效隔离授权（离线/未上线时由消费者判空跳过）
+            coa(m, CoaProtocol.ACTION_AUTH_CHANGE, r.getZone(), ch, reason);
         } catch (Exception e) {
             log.warn("写隔离记录失败: mac={} {}", m, e.getMessage());
         }
@@ -199,6 +204,7 @@ public class IsolationService {
             createTasks(r, missing);
             writeState(m, IsolationProtocol.ZONE_REMEDIATION, IsolationProtocol.STATUS_ACTIVE,
                     r.getReason(), ch.value());
+            coa(m, CoaProtocol.ACTION_AUTH_CHANGE, IsolationProtocol.ZONE_REMEDIATION, ch, r.getReason());
             out.put("ok", true);
             out.put("zone", IsolationProtocol.ZONE_REMEDIATION);
             out.put("channelType", ch.type());
@@ -223,6 +229,7 @@ public class IsolationService {
             if (r != null) recordMapper.release(r.getId(), truncate(cause, 250));
             redis.delete(IsolationProtocol.stateKey(m));
             log.info("隔离释放: mac={} 原因={}", m, cause);
+            coaDisconnect(m, cause);
         } catch (Exception e) {
             log.warn("隔离释放失败: mac={} {}", m, e.getMessage());
         }
@@ -251,6 +258,7 @@ public class IsolationService {
             recordMapper.release(r.getId(), truncate(cause, 250));
             redis.delete(IsolationProtocol.stateKey(m));
             log.info("隔离自动释放: mac={} 原因={}", m, cause);
+            coaDisconnect(m, cause);
         } catch (Exception e) {
             log.warn("隔离自动释放失败: mac={} {}", m, e.getMessage());
         }
@@ -318,12 +326,49 @@ public class IsolationService {
                 redis.delete(IsolationProtocol.stateKey(m));
                 log.info("修复任务全部完成，自动迁回正常办公区: mac={} record={} 任务数={}",
                         m, r.getId(), tasks.size());
+                coaDisconnect(m, cause);
                 return cause;
             }
         } catch (Exception e) {
             log.warn("修复完成自动迁回失败: mac={} {}", m, e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * 是否处于隔离/修复中（Redis 状态优先，未命中回源 DB）。
+     * 供软件基线判定使用：隔离期间不允许用历史“一次性确认”标记放行。
+     */
+    public boolean hasActiveIsolation(String mac) {
+        String m = IsolationProtocol.normalizeMac(mac);
+        if (m.length() != 12) return false;
+        try {
+            if (redis.hasKey(IsolationProtocol.stateKey(m))) return true;
+        } catch (Exception e) {
+            log.debug("读取隔离状态失败: mac={} {}", m, e.getMessage());
+        }
+        try {
+            IsolationRecord r = recordMapper.selectActiveByMac(m);
+            return r != null && r.getId() != null;
+        } catch (Exception e) {
+            log.debug("查询隔离记录失败: mac={} {}", m, e.getMessage());
+            return false;
+        }
+    }
+
+    /** 隔离/转区：请求在线会话切换授权（ACL/VLAN）。 */
+    private void coa(String mac, String action, String zone, Channel ch, String reason) {
+        try {
+            coaService.enqueue(mac, action, zone, ch == null ? null : ch.type(),
+                    ch == null ? null : ch.value(), reason);
+        } catch (Exception e) {
+            log.debug("CoA 投递失败(忽略): mac={} {}", mac, e.getMessage());
+        }
+    }
+
+    /** 释放/迁回：断开会话让终端重认证，从而恢复正常 ACL/VLAN。 */
+    private void coaDisconnect(String mac, String cause) {
+        coa(mac, CoaProtocol.ACTION_DISCONNECT, "NORMAL", null, cause);
     }
 
     /** 终端隔离状态（Redis 优先，未命中回源 DB）。 */

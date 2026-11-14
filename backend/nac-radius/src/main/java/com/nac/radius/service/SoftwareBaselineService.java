@@ -50,6 +50,8 @@ public class SoftwareBaselineService {
     private volatile boolean enabled;
     private volatile String mode = SoftwareBaseline.MODE_ANY;
     private volatile String secret = "";
+    /** 隔离期间是否忽略 ONCE 历史确认（默认开启）。 */
+    private volatile boolean onceRecheckOnIsolation = true;
 
     private volatile long polExpire;
     private volatile List<SoftwareBaseline.Policy> policies = List.of();
@@ -76,18 +78,23 @@ public class SoftwareBaselineService {
         boolean e = false;
         String m = SoftwareBaseline.MODE_ANY;
         String s = "";
+        boolean onceRecheck = true;
         try {
             e = "true".equalsIgnoreCase(cfg("softwareBaselineEnabled"));
             String mv = cfg("softwareBaselineMode");
             if (mv != null && !mv.isBlank()) m = mv.trim().toUpperCase(Locale.ROOT);
             String sv = cfg("softwareBaselineSecret");
             if (sv != null) s = sv.trim();
+            // 默认开启：隔离期间忽略历史 ONCE 确认标记，强制按实时上报判定
+            String rv = cfg("softwareBaselineOnceRecheckOnIsolation");
+            if (rv != null && !rv.isBlank()) onceRecheck = "true".equalsIgnoreCase(rv.trim());
         } catch (Exception ex) {
             log.warn("软件基线配置读取失败: {}", ex.getMessage());
         }
         enabled = e;
         mode = m;
         secret = s;
+        onceRecheckOnIsolation = onceRecheck;
         cfgExpire = now + CACHE_TTL_MS;
     }
 
@@ -280,22 +287,35 @@ public class SoftwareBaselineService {
         }
 
         List<SoftwareBaseline.Policy> required = requiredPolicies();
+        int onceHits = required.isEmpty() ? 0 : onceCount(mac, required);
+        // 隔离中强制实时校验：历史 ONCE 确认不能作为放行依据（否则卸载软件后仍被判合规）
+        boolean isolated = onceRecheckOnIsolation && isolationService.hasActiveIsolation(mac);
 
         // ONCE：全部必需项均已确认过 → 直接放行（不再采集判定，仅续期合规标记）
-        if (!required.isEmpty() && allOnce(required) && onceCount(mac, required) == required.size()) {
+        if (!isolated && !required.isEmpty() && onceHits == required.size()) {
             redis.set(REPORT_KEY_PREFIX + mac, "1", REPORT_TTL);
             isolationService.maybeAutoRelease(mac, "软件基线合规（ONCE 已确认）");
             return new Result(true, "ONCE 模式已确认合规", List.of(), items.size());
         }
 
-        SoftwareBaseline.EvalResult er = evaluateConsideringOnce(mac, required, items);
+        SoftwareBaseline.EvalResult er = evaluateConsideringOnce(mac, required, items, isolated);
         if (er.ok()) {
             redis.set(REPORT_KEY_PREFIX + mac, "1", REPORT_TTL);
             markOnce(mac, required, items);
             isolationService.maybeAutoRelease(mac, "软件基线合规");
+            if (isolated) {
+                log.info("metric=swa_once_recheck result=PASS mac={} onceHits={} 隔离中强制实时校验通过",
+                        mac, onceHits);
+            }
             log.debug("软件基线心跳合规: mac={} host={} 上报={} 项", mac, req.getHostname(), items.size());
         } else {
             clearReport(mac);
+            if (isolated) {
+                // 旧确认已失效：清除标记，避免释放后又被历史标记直接放行
+                if (onceHits > 0) clearOnce(mac, required);
+                log.info("metric=swa_once_recheck result=FAIL mac={} onceHits={} missing={}",
+                        mac, onceHits, er.missing());
+            }
             log.info("软件基线心跳不合规: mac={} host={} 原因={}", mac, req.getHostname(), er.reason());
         }
         return new Result(er.ok(), er.reason(), er.missing(), items.size());
@@ -306,6 +326,8 @@ public class SoftwareBaselineService {
         String m = SoftwareBaseline.normMac(mac);
         if (m.isEmpty()) return false;
         if (redis.hasKey(REPORT_KEY_PREFIX + m)) return true;
+        // 隔离中不认可历史 ONCE 确认：必须依赖实时心跳标记，防止卸载软件后被旧标记放行
+        if (onceRecheckOnIsolation && isolationService.hasActiveIsolation(m)) return false;
         List<SoftwareBaseline.Policy> required = requiredPolicies();
         return !required.isEmpty() && allOnce(required) && onceCount(m, required) == required.size();
     }
@@ -349,16 +371,17 @@ public class SoftwareBaselineService {
         return n;
     }
 
-    /** 逐策略判定（ONCE 策略命中历史确认标记即视为满足）。 */
+    /** 逐策略判定（ONCE 策略命中历史确认标记即视为满足；ignoreOnce=true 时忽略标记）。 */
     private SoftwareBaseline.EvalResult evaluateConsideringOnce(String mac,
                                                                 List<SoftwareBaseline.Policy> required,
-                                                                List<SoftwareBaseline.Item> items) {
+                                                                List<SoftwareBaseline.Item> items,
+                                                                boolean ignoreOnce) {
         if (required.isEmpty()) return new SoftwareBaseline.EvalResult(true, "无可强制软件项", List.of());
         List<String> missing = new ArrayList<>();
         int matched = 0;
         for (SoftwareBaseline.Policy p : required) {
             boolean sat = SoftwareBaseline.evaluate(List.of(p), items, SoftwareBaseline.MODE_ALL, 64).ok()
-                    || (p.once() && redis.hasKey(onceKey(mac, p)));
+                    || (!ignoreOnce && p.once() && redis.hasKey(onceKey(mac, p)));
             if (sat) matched++;
             else missing.add(p.name() == null || p.name().isBlank() ? p.processName() : p.name());
         }
@@ -367,6 +390,18 @@ public class SoftwareBaselineService {
         String reason = ok ? (all ? "软件基线校验通过（全部必需项）" : "软件基线校验通过（任一必需项）")
                 : "缺少必需软件: " + String.join(",", missing);
         return new SoftwareBaseline.EvalResult(ok, reason, missing);
+    }
+
+    /** 清除 ONCE 确认标记（强制重校验失败时调用，防止旧标记继续生效）。 */
+    private void clearOnce(String mac, List<SoftwareBaseline.Policy> required) {
+        for (SoftwareBaseline.Policy p : required) {
+            if (!p.once()) continue;
+            try {
+                redis.delete(onceKey(mac, p));
+            } catch (Exception e) {
+                log.debug("清除 ONCE 标记失败: mac={} {}", mac, e.getMessage());
+            }
+        }
     }
 
     /** 首次合规心跳：为当前满足的 ONCE 策略写入确认标记（TTL 12h）。 */

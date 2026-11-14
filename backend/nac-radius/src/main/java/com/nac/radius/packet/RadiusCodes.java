@@ -15,6 +15,14 @@ public final class RadiusCodes {
     public static final byte ACCOUNTING_RESPONSE = 5;
     public static final byte ACCESS_CHALLENGE = 11;
 
+    /** 动态授权（RFC 5176）：CoA-Request / Disconnect-Request 及其应答 */
+    public static final byte DISCONNECT_REQUEST = 40;
+    public static final byte DISCONNECT_ACK = 41;
+    public static final byte DISCONNECT_NAK = 42;
+    public static final byte COA_REQUEST = 43;
+    public static final byte COA_ACK = 44;
+    public static final byte COA_NAK = 45;
+
     /** 常用属性 Type */
     public static final int USER_NAME = 1;
     public static final int USER_PASSWORD = 2;

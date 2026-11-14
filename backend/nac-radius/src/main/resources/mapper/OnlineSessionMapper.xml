@@ -39,11 +39,13 @@
         LIMIT 1
     </select>
 
+    <!-- 取某 MAC 最近一条会话（优先在线），CoA 需要 nas_ip/acct_session_id/username 定位会话 -->
     <select id="selectLatestByMac" resultType="com.nac.radius.entity.OnlineSession">
-        SELECT id, acct_session_id, start_time, update_time
+        SELECT id, acct_session_id, username, username_mask, mac, nas_ip, framed_ip, vlan_id,
+               status, start_time, update_time
         FROM sys_online_session
         WHERE mac = #{mac}
-        ORDER BY id DESC
+        ORDER BY status DESC, id DESC
         LIMIT 1
     </select>
 </mapper>

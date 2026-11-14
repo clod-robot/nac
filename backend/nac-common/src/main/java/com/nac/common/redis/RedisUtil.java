@@ -118,6 +118,39 @@ public class RedisUtil {
         }
     }
 
+    /**
+     * 列表左端入队并限制总长度（LPUSH + LTRIM）。
+     * 用于跨服务命令队列：消费者长时间不可用时只保留最近的 max 条，避免无界增长。
+     */
+    public void lpushCapped(String key, String value, int max) {
+        try {
+            redisTemplate.opsForList().leftPush(key, value);
+            if (max > 0) redisTemplate.opsForList().trim(key, 0, max - 1L);
+        } catch (Exception e) {
+            log.warn("Redis lpush 失败: {}", key, e);
+        }
+    }
+
+    /** 阻塞出队（BRPOP），超时或 Redis 故障返回 null。 */
+    public String brpop(String key, int timeoutSeconds) {
+        try {
+            return redisTemplate.opsForList().rightPop(key, timeoutSeconds, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.warn("Redis brpop 失败: {}", key, e);
+            return null;
+        }
+    }
+
+    /** 队列长度（Redis 故障返回 -1）。 */
+    public long llen(String key) {
+        try {
+            Long n = redisTemplate.opsForList().size(key);
+            return n == null ? 0 : n;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
     /** 持久化自增（无过期），用于配置发布版本号（引擎据此热加载）。 */
     public long increment(String key) {
         try {
