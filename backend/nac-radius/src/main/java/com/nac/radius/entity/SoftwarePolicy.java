@@ -15,4 +15,10 @@ public class SoftwarePolicy {
     /** 1=必须满足 0=仅记录 */
     private Integer required;
     private Integer enabled;
+    /** REALTIME / ONCE */
+    private String checkMode;
+    private String popupTitle;
+    private String popupContent;
+    private String popupActionText;
+    private String popupActionUrl;
 }

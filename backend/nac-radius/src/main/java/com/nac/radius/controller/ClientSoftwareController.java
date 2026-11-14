@@ -33,13 +33,16 @@ public class ClientSoftwareController {
 
     private final SoftwareBaselineService baselineService;
     private final RedisUtil redis;
+    private final com.nac.radius.service.IsolationService isolationService;
 
-    public ClientSoftwareController(SoftwareBaselineService baselineService, RedisUtil redis) {
+    public ClientSoftwareController(SoftwareBaselineService baselineService, RedisUtil redis,
+                                    com.nac.radius.service.IsolationService isolationService) {
         this.baselineService = baselineService;
         this.redis = redis;
+        this.isolationService = isolationService;
     }
 
-    /** 下发当前策略要求的软件名（不含哈希），供客户端采集与心跳使用。 */
+    /** 下发当前策略要求的软件名（不含哈希）、校验模式与隔离配置，供客户端采集、心跳与弹窗。 */
     @GetMapping("/software-policy")
     @RateLimit(limit = 120, window = 60)
     public Result<Map<String, Object>> policy() {
@@ -48,6 +51,14 @@ public class ClientSoftwareController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enabled", enabled);
         data.put("names", names);
+        data.put("checkMode", baselineService.effectiveCheckMode());
+        com.nac.radius.entity.IsolationConfig c = isolationService.config();
+        Map<String, Object> iso = new LinkedHashMap<>();
+        iso.put("enabled", c.getEnabled());
+        iso.put("mode", c.getMode());
+        iso.put("remediationUrl", c.getRemediationPortalUrl());
+        iso.put("serverIps", c.getRemediationServerIps());
+        data.put("isolation", iso);
         return Result.success(data);
     }
 
@@ -65,6 +76,12 @@ public class ClientSoftwareController {
         data.put("message", r.message());
         data.put("missing", r.missing());
         data.put("reported", r.reported());
+        // 不合规时下发自定义弹窗（策略级覆盖 > 全局模板，{software} 已替换为实际缺失项）
+        if (!r.ok() && baselineService.enforced()) {
+            data.put("popup", isolationService.popup(r.missing(), baselineService.rawPolicies()));
+        }
+        // 隔离/修复区状态（供客户端展示“已进入隔离区/可申请修复”）
+        if (req != null) data.put("isolation", isolationService.state(req.getMac()));
         return Result.success(data);
     }
 

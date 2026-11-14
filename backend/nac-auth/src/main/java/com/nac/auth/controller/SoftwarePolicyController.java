@@ -69,6 +69,7 @@ public class SoftwarePolicyController {
                 "enabled", service.isEnabled(),
                 "enforced", service.enforced(),
                 "mode", service.mode(),
+                "checkMode", service.effectiveCheckMode(),
                 "required", service.requiredNames()));
     }
 
@@ -81,6 +82,7 @@ public class SoftwarePolicyController {
         data.put("enabled", service.isEnabled());
         data.put("enforced", service.enforced());
         data.put("mode", service.mode());
+        data.put("checkMode", service.effectiveCheckMode());
         data.put("required", service.requiredNames());
         data.put("rows", service.realtime());
         return Result.success(data);

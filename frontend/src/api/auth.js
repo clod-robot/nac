@@ -91,6 +91,33 @@ export const softwarePolicyUpdate = (data) => request.put('/api/auth/admin/softw
 export const softwarePolicyDelete = (id) => request.delete(`/api/auth/admin/software-policies/${id}`)
 export const softwarePolicyRealtime = () => request.get('/api/auth/admin/software-policies/realtime')
 
+// 终端合规弹窗模板（admin）
+export const getPopupTemplate = () => request.get('/api/auth/admin/popup-template')
+export const savePopupTemplate = (data) => request.put('/api/auth/admin/popup-template', data)
+
+// 隔离区 / 修复区（admin）
+export const getIsolationConfig = () => request.get('/api/auth/admin/isolation/config')
+export const saveIsolationConfig = (data) => request.put('/api/auth/admin/isolation/config', data)
+export const isolationRecords = (params) => request.get('/api/auth/admin/isolation/records', { params })
+export const isolationStats = () => request.get('/api/auth/admin/isolation/stats')
+export const isolationRelease = (id, cause) => request.post(`/api/auth/admin/isolation/release/${id}`, null, { params: { cause } })
+export const isolationRemediate = (id) => request.post(`/api/auth/admin/isolation/remediate/${id}`)
+
+// 修复编排：补丁库 / 病毒库 / 修复规则 / 任务（admin）
+export const patchList = () => request.get('/api/auth/admin/remediation/patches')
+export const patchCreate = (data) => request.post('/api/auth/admin/remediation/patches', data)
+export const patchUpdate = (data) => request.put('/api/auth/admin/remediation/patches', data)
+export const patchDelete = (id) => request.delete(`/api/auth/admin/remediation/patches/${id}`)
+export const avList = () => request.get('/api/auth/admin/remediation/avs')
+export const avCreate = (data) => request.post('/api/auth/admin/remediation/avs', data)
+export const avUpdate = (data) => request.put('/api/auth/admin/remediation/avs', data)
+export const avDelete = (id) => request.delete(`/api/auth/admin/remediation/avs/${id}`)
+export const remediationRuleList = () => request.get('/api/auth/admin/remediation/rules')
+export const remediationRuleCreate = (data) => request.post('/api/auth/admin/remediation/rules', data)
+export const remediationRuleUpdate = (data) => request.put('/api/auth/admin/remediation/rules', data)
+export const remediationRuleDelete = (id) => request.delete(`/api/auth/admin/remediation/rules/${id}`)
+export const remediationTasks = (params) => request.get('/api/auth/admin/remediation/tasks', { params })
+
 // 系统信息：服务器时间 / NTP（admin）
 export const getSystemInfo = () => request.get('/api/auth/system/info')
 export const setSystemNtp = (data) => request.put('/api/auth/system/ntp', data)

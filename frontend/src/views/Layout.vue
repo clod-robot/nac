@@ -8,6 +8,8 @@
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/software-baseline"><el-icon><Aim /></el-icon><span>终端软件识别</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/isolation"><el-icon><Monitor /></el-icon><span>隔离与修复</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/remediation-lib"><el-icon><Tools /></el-icon><span>补丁与病毒库</span></el-menu-item>
         <el-sub-menu v-permission="['admin']" index="portal">
           <template #title><el-icon><Setting /></el-icon><span>Portal 配置</span></template>
           <el-menu-item index="/portal-config">协议配置</el-menu-item>
@@ -72,6 +74,8 @@
         <el-menu-item v-permission="['admin']" index="/user"><el-icon><User /></el-icon><span>账号管理</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/exempt-terminals"><el-icon><Key /></el-icon><span>免认证终端</span></el-menu-item>
         <el-menu-item v-permission="['admin']" index="/software-baseline"><el-icon><Aim /></el-icon><span>终端软件识别</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/isolation"><el-icon><Monitor /></el-icon><span>隔离与修复</span></el-menu-item>
+        <el-menu-item v-permission="['admin']" index="/remediation-lib"><el-icon><Tools /></el-icon><span>补丁与病毒库</span></el-menu-item>
         <el-sub-menu v-permission="['admin']" index="portal">
           <template #title><el-icon><Setting /></el-icon><span>Portal 配置</span></template>
           <el-menu-item index="/portal-config">协议配置</el-menu-item>

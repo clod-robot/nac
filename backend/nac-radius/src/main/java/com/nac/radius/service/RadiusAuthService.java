@@ -4,6 +4,7 @@ import com.nac.common.redis.RedisUtil;
 import com.nac.common.security.AesCryptoUtil;
 import com.nac.common.syslog.SyslogForwarder;
 import com.nac.common.software.SoftwareBaseline;
+import com.nac.common.isolation.IsolationProtocol;
 import com.nac.radius.config.RadiusProperties;
 import com.nac.radius.entity.AuthLog;
 import com.nac.radius.entity.RadiusUser;
@@ -46,6 +47,7 @@ public class RadiusAuthService {
     private final SyslogForwarder syslogForwarder;
     private final EapTlsSupport eapTlsSupport;
     private final SoftwareBaselineService softwareBaseline;
+    private final IsolationService isolationService;
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     /** EAP-TLS 隧道内软件基线的内层 EAP 标识（独立于外层 Request id） */
@@ -55,7 +57,7 @@ public class RadiusAuthService {
                              RedisUtil redisUtil, AesCryptoUtil aesCryptoUtil, RadiusProperties props,
                              RadiusSecretService secretService, ExemptTerminalMapper exemptMapper,
                              SyslogForwarder syslogForwarder, EapTlsSupport eapTlsSupport,
-                             SoftwareBaselineService softwareBaseline) {
+                             SoftwareBaselineService softwareBaseline, IsolationService isolationService) {
         this.userMapper = userMapper;
         this.authLogMapper = authLogMapper;
         this.nasMapper = nasMapper;
@@ -67,6 +69,7 @@ public class RadiusAuthService {
         this.syslogForwarder = syslogForwarder;
         this.eapTlsSupport = eapTlsSupport;
         this.softwareBaseline = softwareBaseline;
+        this.isolationService = isolationService;
     }
 
     /** 用户查询短 TTL 缓存：EAP-TLS 握手有十几次往返，避免每轮都查库（降延迟 + 减 DB 负载）。 */
@@ -190,6 +193,12 @@ public class RadiusAuthService {
 
         // 终端软件基线：PAP/CHAP 无法做 EAP 挑战应答，按客户端心跳（实时上报）合规状态判定
         if (softwareBaseline.enforced() && !softwareBaseline.isCompliant(callingMac)) {
+            RadiusPacket iso = isolationAccept(request, user, "终端软件基线不满足",
+                    missingNames(), -1, false);
+            if (iso != null) {
+                clearFailures(username);
+                return iso;
+            }
             registerFailure(username);
             reject.addString(RadiusCodes.REPLY_MESSAGE, "software baseline not satisfied");
             recordAuth(request, 0, "软件基线不满足");
@@ -407,6 +416,12 @@ public class RadiusAuthService {
         eapTlsSupport.remove(sid);
         if (!r.ok()) {
             softwareBaseline.consumeChallenge(s.swaNonce);
+            RadiusPacket iso = isolationAccept(request, user, "软件基线: " + r.message(),
+                    r.missing(), request.getIdentifier(), true);
+            if (iso != null) {
+                clearFailures(user.getUsername());
+                return iso;
+            }
             registerFailure(user.getUsername());
             log.info("RADIUS 软件基线拒绝: user={} mac={} 原因={}", mask(user.getUsername()),
                     request.getString(RadiusCodes.CALLING_STATION_ID), r.message());
@@ -481,6 +496,12 @@ public class RadiusAuthService {
             if (softwareBaseline.enforced()
                     && !softwareBaseline.isCompliant(request.getString(RadiusCodes.CALLING_STATION_ID))) {
                 eapTlsSupport.remove(sid);
+                RadiusPacket iso = isolationAccept(request, user, "终端软件基线不满足",
+                        missingNames(), request.getIdentifier(), true);
+                if (iso != null) {
+                    clearFailures(user.getUsername());
+                    return iso;
+                }
                 registerFailure(user.getUsername());
                 return eapReject(request, user, "software baseline not satisfied", id);
             }
@@ -519,6 +540,12 @@ public class RadiusAuthService {
                 nonce, request.getString(RadiusCodes.CALLING_STATION_ID), text);
         softwareBaseline.consumeChallenge(nonce);
         if (!r.ok()) {
+            RadiusPacket iso = isolationAccept(request, user, "软件基线: " + r.message(),
+                    r.missing(), eapId, false);
+            if (iso != null) {
+                clearFailures(user.getUsername());
+                return iso;
+            }
             registerFailure(user.getUsername());
             log.info("RADIUS 软件基线拒绝: user={} mac={} 原因={}",
                     mask(user.getUsername()), request.getString(RadiusCodes.CALLING_STATION_ID), r.message());
@@ -538,6 +565,51 @@ public class RadiusAuthService {
         accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
         recordAuth(request, 1, method + " 认证成功");
         log.info("RADIUS {} 认证成功: user={} nas={}", method, mask(user.getUsername()), nasIpOf(request));
+        return accept;
+    }
+
+    // ---------------- 隔离区下发 ----------------
+
+    /** 当前策略下缺失软件显示名（用于隔离记录；实际缺失项以客户端心跳为准）。 */
+    private List<String> missingNames() {
+        try {
+            return softwareBaseline.evaluateItems(java.util.List.of(), 64).missing();
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
+    }
+
+    /**
+     * 软件基线不满足时的隔离 Accept：隔离开启则下发 ACL(Filter-Id) 或 VLAN 并返回 Accept；
+     * 未开启或隔离写入失败返回 null，调用方退回拒绝认证。
+     *
+     * @param eapId         EAP 成功报文 id；-1 表示非 EAP（PAP/CHAP）
+     * @param useRequestId  EAP 成功报文是否复用请求 identifier（PEAP/EAP-TLS 外层）
+     */
+    private RadiusPacket isolationAccept(RadiusPacket request, RadiusUser user, String reason,
+                                         List<String> missing, int eapId, boolean useRequestId) {
+        if (!isolationService.enabled()) return null;
+        String mac = request.getString(RadiusCodes.CALLING_STATION_ID);
+        IsolationService.Channel ch = isolationService.markQuarantine(mac, framedIpOf(request),
+                user.getUsername(), nasIpOf(request), reason, missing);
+        if (ch == null) return null;
+
+        RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
+        if (eapId >= 0) {
+            int id = useRequestId ? request.getIdentifier() : eapId;
+            putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, id, null));
+            accept.addAttribute(RadiusCodes.MESSAGE_AUTHENTICATOR, new byte[16]);
+        }
+        accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
+        if (IsolationProtocol.MODE_VLAN.equalsIgnoreCase(ch.type())) {
+            addVlan(accept, ch.vlan());
+        } else {
+            accept.addString(RadiusCodes.FILTER_ID, ch.acl());
+        }
+        accept.addString(RadiusCodes.REPLY_MESSAGE, "software baseline not satisfied: quarantined");
+        recordAuth(request, 1, "软件基线不满足，进入隔离区");
+        log.info("RADIUS 软件基线不满足，下发隔离区: user={} mac={} 通道={}:{}",
+                mask(user.getUsername()), mac, ch.type(), ch.value());
         return accept;
     }
 

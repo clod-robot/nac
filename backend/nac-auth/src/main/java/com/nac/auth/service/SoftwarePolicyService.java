@@ -45,6 +45,7 @@ public class SoftwarePolicyService {
     private final PortalConfigMapper configMapper;
     private final OnlineSessionMapper onlineMapper;
     private final RedisUtil redisUtil;
+    private final com.nac.auth.mapper.PopupTemplateMapper popupMapper;
 
     private volatile long cfgExpire;
     private volatile boolean enabled;
@@ -55,11 +56,13 @@ public class SoftwarePolicyService {
     private volatile List<SoftwareBaseline.Policy> policies = List.of();
 
     public SoftwarePolicyService(SoftwarePolicyMapper mapper, PortalConfigMapper configMapper,
-                                 OnlineSessionMapper onlineMapper, RedisUtil redisUtil) {
+                                 OnlineSessionMapper onlineMapper, RedisUtil redisUtil,
+                                 com.nac.auth.mapper.PopupTemplateMapper popupMapper) {
         this.mapper = mapper;
         this.configMapper = configMapper;
         this.onlineMapper = onlineMapper;
         this.redisUtil = redisUtil;
+        this.popupMapper = popupMapper;
     }
 
     // ---------------- 策略 CRUD ----------------
@@ -112,6 +115,24 @@ public class SoftwarePolicyService {
         if (p.getRequired() == null) p.setRequired(1);
         p.setRequired(p.getRequired() == 0 ? 0 : 1);
         if (p.getEnabled() == null) p.setEnabled(1);
+
+        // 校验模式：REALTIME=每次心跳；ONCE=认证时 + 首次合规心跳后不再校验
+        String cm = p.getCheckMode() == null ? "" : p.getCheckMode().trim().toUpperCase(Locale.ROOT);
+        p.setCheckMode(SoftwareBaseline.CHECK_ONCE.equals(cm) ? SoftwareBaseline.CHECK_ONCE
+                : SoftwareBaseline.CHECK_REALTIME);
+
+        p.setPopupTitle(trimToNull(p.getPopupTitle(), 128, "弹窗标题过长"));
+        p.setPopupContent(trimToNull(p.getPopupContent(), 2000, "弹窗正文过长"));
+        p.setPopupActionText(trimToNull(p.getPopupActionText(), 64, "按钮文案过长"));
+        p.setPopupActionUrl(trimToNull(p.getPopupActionUrl(), 512, "按钮地址过长"));
+    }
+
+    private String trimToNull(String v, int max, String err) {
+        if (v == null) return null;
+        String s = v.trim();
+        if (s.isEmpty()) return null;
+        if (s.length() > max) throw new BusinessException(400, err);
+        return s;
     }
 
     private void invalidate() {
@@ -167,7 +188,7 @@ public class SoftwarePolicyService {
         try {
             for (SoftwarePolicy p : mapper.selectEnabled()) {
                 out.add(new SoftwareBaseline.Policy(p.getName(), p.getProcessName(), p.getSha256(),
-                        p.getMatchMode(), p.getRequired() != null && p.getRequired() == 1));
+                        p.getMatchMode(), p.getRequired() != null && p.getRequired() == 1, p.getCheckMode()));
             }
         } catch (Exception ex) {
             log.warn("软件基线策略读取失败: {}", ex.getMessage());
@@ -199,6 +220,59 @@ public class SoftwarePolicyService {
             if (p.required()) return true;
         }
         return false;
+    }
+
+    // ---------------- 校验模式 / 弹窗 ----------------
+
+    /** 聚合校验模式：仅当全部必需策略都是 ONCE 才返回 ONCE，否则 REALTIME。 */
+    public String effectiveCheckMode() {
+        boolean hasRequired = false;
+        for (SoftwareBaseline.Policy p : enabledPolicies()) {
+            if (!p.required()) continue;
+            hasRequired = true;
+            if (!p.once()) return SoftwareBaseline.CHECK_REALTIME;
+        }
+        return hasRequired ? SoftwareBaseline.CHECK_ONCE : SoftwareBaseline.CHECK_REALTIME;
+    }
+
+    /**
+     * 解析命中弹窗：策略级字段优先，未配置字段回退全局模板。
+     *
+     * @param missing 缺失软件显示名（用于替换正文 {software}）
+     */
+    public Map<String, Object> resolvedPopup(List<String> missing) {
+        String software = missing == null || missing.isEmpty() ? "指定安全软件" : String.join("、", missing);
+        String title = null, content = null, actionText = null, actionUrl = null;
+        Integer delaySec = null, allowDelay = null;
+        try {
+            for (SoftwarePolicy p : mapper.selectEnabled()) {
+                if (p.getRequired() == null || p.getRequired() != 1) continue;
+                if (title == null) title = p.getPopupTitle();
+                if (content == null) content = p.getPopupContent();
+                if (actionText == null) actionText = p.getPopupActionText();
+                if (actionUrl == null) actionUrl = p.getPopupActionUrl();
+            }
+            com.nac.auth.entity.PopupTemplate t = popupMapper.select();
+            if (t != null) {
+                if (title == null) title = t.getTitle();
+                if (content == null) content = t.getContent();
+                if (actionText == null) actionText = t.getActionText();
+                if (actionUrl == null) actionUrl = t.getActionUrl();
+                delaySec = t.getDelaySec();
+                allowDelay = t.getAllowDelay();
+            }
+        } catch (Exception e) {
+            log.warn("弹窗模板读取失败: {}", e.getMessage());
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("title", title == null ? "终端安全合规提醒" : title);
+        m.put("content", (content == null ? "检测到您的终端未运行必需的安全软件：{software}" : content)
+                .replace("{software}", software));
+        m.put("actionText", actionText == null ? "立即处理" : actionText);
+        m.put("actionUrl", actionUrl == null ? "" : actionUrl);
+        m.put("delaySec", delaySec == null ? 30 : delaySec);
+        m.put("allowDelay", allowDelay == null || allowDelay == 1);
+        return m;
     }
 
     // ---------------- 心跳合规判定 ----------------

@@ -37,6 +37,8 @@ public final class RadiusCodes {
     public static final int ACCT_TERMINATE_CAUSE = 49;
     public static final int NAS_IDENTIFIER = 32;
     public static final int FRAMED_MTU = 12;
+    /** Filter-Id（RFC 2865）：ACL 隔离时下发的 ACL 名称。 */
+    public static final int FILTER_ID = 11;
 
     /** 计费 Acct-Status-Type 取值 */
     public static final int ACCT_START = 1;

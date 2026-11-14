@@ -10,7 +10,9 @@ import java.util.List;
 @Mapper
 public interface SoftwarePolicyMapper {
 
-    @Select("SELECT id, name, process_name, sha256, match_mode, is_required AS required, enabled " +
+    @Select("SELECT id, name, process_name, sha256, match_mode, is_required AS required, enabled, " +
+            "check_mode AS checkMode, popup_title AS popupTitle, popup_content AS popupContent, " +
+            "popup_action_text AS popupActionText, popup_action_url AS popupActionUrl " +
             "FROM sys_software_policy WHERE enabled = 1 ORDER BY id ASC")
     List<SoftwarePolicy> selectEnabled();
 }

@@ -38,9 +38,22 @@ public final class SoftwareBaseline {
     public static final int MAX_NAMES = 12;
     public static final String MODE_ANY = "ANY";
     public static final String MODE_ALL = "ALL";
+    /** 每次心跳都校验 */
+    public static final String CHECK_REALTIME = "REALTIME";
+    /** 认证时 + 首次心跳通过后不再校验（ONCE 标记有效期见 ONCE_TTL） */
+    public static final String CHECK_ONCE = "ONCE";
 
-    /** 策略条目（对应 sys_software_policy 一行） */
-    public record Policy(String name, String processName, String sha256, String matchMode, boolean required) {}
+    /**
+     * 策略条目（对应 sys_software_policy 一行）。
+     * checkMode=REALTIME/ONCE；为空按 REALTIME 处理。
+     */
+    public record Policy(String name, String processName, String sha256, String matchMode,
+                         boolean required, String checkMode) {
+
+        public boolean once() {
+            return CHECK_ONCE.equalsIgnoreCase(checkMode == null ? "" : checkMode.trim());
+        }
+    }
 
     /** 客户端上报的一件软件：归一化名 + SHA256（可为截断） */
     public record Item(String name, String sha256) {}

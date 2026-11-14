@@ -1,5 +1,6 @@
 package com.nac.radius.service;
 
+import com.nac.common.isolation.IsolationProtocol;
 import com.nac.common.redis.RedisUtil;
 import com.nac.common.software.SoftwareBaseline;
 import com.nac.radius.dto.SoftwareReportReq;
@@ -30,6 +31,8 @@ public class SoftwareBaselineService {
 
     public static final String CHALLENGE_KEY_PREFIX = "nac:swa:chal:";
     public static final String REPORT_KEY_PREFIX = "nac:swa:report:";
+    /** ONCE 模式：首次合规确认标记（按 MAC + 策略进程名维度）。 */
+    public static final String ONCE_KEY_PREFIX = "nac:swa:once:";
     private static final String REPORT_NONCE_PREFIX = "nac:swa:rnonce:";
     private static final int CHALLENGE_TTL = 120;
     private static final int REPORT_TTL = 90;
@@ -40,6 +43,7 @@ public class SoftwareBaselineService {
     private final SoftwarePolicyMapper policyMapper;
     private final PortalConfigReader configReader;
     private final RedisUtil redis;
+    private final IsolationService isolationService;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private volatile long cfgExpire;
@@ -49,11 +53,15 @@ public class SoftwareBaselineService {
 
     private volatile long polExpire;
     private volatile List<SoftwareBaseline.Policy> policies = List.of();
+    /** 原始策略（保留弹窗覆盖字段），与 policies 同周期刷新。 */
+    private volatile List<SoftwarePolicy> rawPolicies = List.of();
 
-    public SoftwareBaselineService(SoftwarePolicyMapper policyMapper, PortalConfigReader configReader, RedisUtil redis) {
+    public SoftwareBaselineService(SoftwarePolicyMapper policyMapper, PortalConfigReader configReader,
+                                   RedisUtil redis, IsolationService isolationService) {
         this.policyMapper = policyMapper;
         this.configReader = configReader;
         this.redis = redis;
+        this.isolationService = isolationService;
     }
 
     public record Challenge(String mac, String username, long ts) {}
@@ -110,21 +118,41 @@ public class SoftwareBaselineService {
         long now = System.currentTimeMillis();
         if (now < polExpire) return;
         List<SoftwareBaseline.Policy> out = new ArrayList<>();
+        List<SoftwarePolicy> raw = new ArrayList<>();
         try {
             for (SoftwarePolicy p : policyMapper.selectEnabled()) {
+                raw.add(p);
                 out.add(new SoftwareBaseline.Policy(p.getName(), p.getProcessName(), p.getSha256(),
-                        p.getMatchMode(), p.getRequired() != null && p.getRequired() == 1));
+                        p.getMatchMode(), p.getRequired() != null && p.getRequired() == 1, p.getCheckMode()));
             }
         } catch (Exception ex) {
             log.warn("软件基线策略读取失败: {}", ex.getMessage());
         }
         policies = List.copyOf(out);
+        rawPolicies = List.copyOf(raw);
         polExpire = now + CACHE_TTL_MS;
     }
 
     public List<SoftwareBaseline.Policy> policies() {
         refreshPolicies();
         return policies;
+    }
+
+    /** 原始策略（含弹窗覆盖字段），供客户端策略接口组装弹窗。 */
+    public List<SoftwarePolicy> rawPolicies() {
+        refreshPolicies();
+        return rawPolicies;
+    }
+
+    /** 聚合校验模式：全部必需策略为 ONCE 时返回 ONCE，否则 REALTIME。 */
+    public String effectiveCheckMode() {
+        boolean has = false;
+        for (SoftwareBaseline.Policy p : policies()) {
+            if (!p.required()) continue;
+            has = true;
+            if (!p.once()) return SoftwareBaseline.CHECK_REALTIME;
+        }
+        return has ? SoftwareBaseline.CHECK_ONCE : SoftwareBaseline.CHECK_REALTIME;
     }
 
     /** 是否真正阻断：开关打开 + 共享密钥非空 + 存在必需策略（缺密钥无法验签，视为未启用避免误锁死）。 */
@@ -251,9 +279,20 @@ public class SoftwareBaselineService {
             return new Result(false, "签名校验失败", List.of(), items.size());
         }
 
-        SoftwareBaseline.EvalResult er = SoftwareBaseline.evaluate(policies(), items, mode, 64);
+        List<SoftwareBaseline.Policy> required = requiredPolicies();
+
+        // ONCE：全部必需项均已确认过 → 直接放行（不再采集判定，仅续期合规标记）
+        if (!required.isEmpty() && allOnce(required) && onceCount(mac, required) == required.size()) {
+            redis.set(REPORT_KEY_PREFIX + mac, "1", REPORT_TTL);
+            isolationService.maybeAutoRelease(mac, "软件基线合规（ONCE 已确认）");
+            return new Result(true, "ONCE 模式已确认合规", List.of(), items.size());
+        }
+
+        SoftwareBaseline.EvalResult er = evaluateConsideringOnce(mac, required, items);
         if (er.ok()) {
             redis.set(REPORT_KEY_PREFIX + mac, "1", REPORT_TTL);
+            markOnce(mac, required, items);
+            isolationService.maybeAutoRelease(mac, "软件基线合规");
             log.debug("软件基线心跳合规: mac={} host={} 上报={} 项", mac, req.getHostname(), items.size());
         } else {
             clearReport(mac);
@@ -262,10 +301,71 @@ public class SoftwareBaselineService {
         return new Result(er.ok(), er.reason(), er.missing(), items.size());
     }
 
-    /** 合规标记（Portal 侧同键共享）。 */
+    /** 合规标记（Portal 侧同键共享）；ONCE 模式已确认的终端即使暂无心跳也视为合规。 */
     public boolean isCompliant(String mac) {
         String m = SoftwareBaseline.normMac(mac);
-        return !m.isEmpty() && redis.hasKey(REPORT_KEY_PREFIX + m);
+        if (m.isEmpty()) return false;
+        if (redis.hasKey(REPORT_KEY_PREFIX + m)) return true;
+        List<SoftwareBaseline.Policy> required = requiredPolicies();
+        return !required.isEmpty() && allOnce(required) && onceCount(m, required) == required.size();
+    }
+
+    // ---------------- ONCE 模式 ----------------
+
+    private List<SoftwareBaseline.Policy> requiredPolicies() {
+        List<SoftwareBaseline.Policy> out = new ArrayList<>();
+        for (SoftwareBaseline.Policy p : policies()) {
+            if (p.required()) out.add(p);
+        }
+        return out;
+    }
+
+    private boolean allOnce(List<SoftwareBaseline.Policy> required) {
+        for (SoftwareBaseline.Policy p : required) {
+            if (!p.once()) return false;
+        }
+        return true;
+    }
+
+    private String onceKey(String mac, SoftwareBaseline.Policy p) {
+        return ONCE_KEY_PREFIX + mac + ":" + SoftwareBaseline.normName(p.processName());
+    }
+
+    private int onceCount(String mac, List<SoftwareBaseline.Policy> required) {
+        int n = 0;
+        for (SoftwareBaseline.Policy p : required) {
+            if (redis.hasKey(onceKey(mac, p))) n++;
+        }
+        return n;
+    }
+
+    /** 逐策略判定（ONCE 策略命中历史确认标记即视为满足）。 */
+    private SoftwareBaseline.EvalResult evaluateConsideringOnce(String mac,
+                                                                List<SoftwareBaseline.Policy> required,
+                                                                List<SoftwareBaseline.Item> items) {
+        if (required.isEmpty()) return new SoftwareBaseline.EvalResult(true, "无可强制软件项", List.of());
+        List<String> missing = new ArrayList<>();
+        int matched = 0;
+        for (SoftwareBaseline.Policy p : required) {
+            boolean sat = SoftwareBaseline.evaluate(List.of(p), items, SoftwareBaseline.MODE_ALL, 64).ok()
+                    || (p.once() && redis.hasKey(onceKey(mac, p)));
+            if (sat) matched++;
+            else missing.add(p.name() == null || p.name().isBlank() ? p.processName() : p.name());
+        }
+        boolean all = !SoftwareBaseline.MODE_ANY.equalsIgnoreCase(mode);
+        boolean ok = all ? missing.isEmpty() : matched > 0;
+        String reason = ok ? (all ? "软件基线校验通过（全部必需项）" : "软件基线校验通过（任一必需项）")
+                : "缺少必需软件: " + String.join(",", missing);
+        return new SoftwareBaseline.EvalResult(ok, reason, missing);
+    }
+
+    /** 首次合规心跳：为当前满足的 ONCE 策略写入确认标记（TTL 12h）。 */
+    private void markOnce(String mac, List<SoftwareBaseline.Policy> required, List<SoftwareBaseline.Item> items) {
+        for (SoftwareBaseline.Policy p : required) {
+            if (!p.once()) continue;
+            if (!SoftwareBaseline.evaluate(List.of(p), items, SoftwareBaseline.MODE_ALL, 64).ok()) continue;
+            redis.set(onceKey(mac, p), "1", IsolationProtocol.ONCE_TTL);
+        }
     }
 
     private void clearReport(String mac) {

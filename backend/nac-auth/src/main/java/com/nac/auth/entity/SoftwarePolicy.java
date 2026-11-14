@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 /**
  * 终端软件基线策略：认证时要求终端运行指定软件。
  * <p>matchMode=PROCESS 只比对进程名；matchMode=HASH 额外要求可执行文件 SHA256 匹配（防同名伪装）。</p>
+ * <p>checkMode=REALTIME 每次心跳校验；ONCE 认证 + 首次心跳确认后不再校验。</p>
  */
 @Data
 public class SoftwarePolicy {
@@ -22,6 +23,13 @@ public class SoftwarePolicy {
     /** 1=必须满足 0=仅记录 */
     private Integer required;
     private Integer enabled;
+    /** REALTIME / ONCE */
+    private String checkMode;
+    /** 策略级弹窗覆盖（空=使用全局模板） */
+    private String popupTitle;
+    private String popupContent;
+    private String popupActionText;
+    private String popupActionUrl;
     private String remark;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
