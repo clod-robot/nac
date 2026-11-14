@@ -18,7 +18,7 @@ import java.util.Map;
  * 终端隔离区 / 修复区接口（终端直连 8083）。
  *
  * <p>终端心跳不合规后：查询隔离状态 → 展示弹窗 → 可申请进入修复区 → 拉取修复任务（补丁/病毒库）
- * → 上报任务结果；服务端在软件基线恢复合规后按配置自动释放。</p>
+ * → 上报任务结果；修复任务全部完成（或软件基线恢复合规）后按配置自动迁回正常办公区。</p>
  */
 @Slf4j
 @RestController
@@ -67,7 +67,7 @@ public class ClientIsolationController {
         return Result.success(isolationService.tasks(mac));
     }
 
-    /** 上报修复任务执行结果；全部完成后由合规心跳触发自动释放。 */
+    /** 上报修复任务执行结果；全部 DONE 后立即自动迁回正常办公区（auto_release=1 时）。 */
     @PostMapping("/remediation/report")
     @RateLimit(limit = 120, window = 60)
     public Result<Map<String, Object>> report(@RequestBody RemediationReportReq req) {
@@ -78,8 +78,19 @@ public class ClientIsolationController {
             return Result.success(out);
         }
         boolean ok = isolationService.reportTask(req.getTaskId(), req.getMac(), req.getStatus(), req.getResultMsg());
+        String released = null;
+        if (ok && "DONE".equalsIgnoreCase(req.getStatus())) {
+            released = isolationService.releaseIfRemediationDone(req.getMac());
+        }
         out.put("ok", ok);
-        out.put("message", ok ? "已更新" : "任务不存在或状态非法");
+        out.put("released", released != null);
+        if (released != null) {
+            out.put("zone", "NORMAL");
+            out.put("releaseCause", released);
+            out.put("message", "修复任务已全部完成，已自动迁回正常办公区");
+        } else {
+            out.put("message", ok ? "已更新" : "任务不存在或状态非法");
+        }
         return Result.success(out);
     }
 }

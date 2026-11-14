@@ -256,6 +256,42 @@ public class IsolationService {
         }
     }
 
+    /**
+     * 修复任务全部完成后立即迁回正常办公区（无需人工干预）。
+     *
+     * <p>与「合规心跳自动释放」互补：该终端本次隔离记录下的修复任务全部为 DONE
+     * （无 PENDING / RUNNING / FAILED）时，直接关闭 ACTIVE 记录并清除 Redis 隔离状态，
+     * 下一次 RADIUS 认证即按正常 ACL / VLAN 下发。需 isolation.enabled=1 且 auto_release=1；
+     * 本路径由明确的修复动作完成触发，不受 release_hold_minutes 最短驻留时长限制。</p>
+     *
+     * @return 已释放返回释放原因；未满足条件（无记录/任务未完成/存在失败/自动释放关闭）返回 null
+     */
+    public String releaseIfRemediationDone(String mac) {
+        if (!enabled() || !autoRelease()) return null;
+        String m = IsolationProtocol.normalizeMac(mac);
+        if (m.length() != 12) return null;
+        try {
+            IsolationRecord r = recordMapper.selectActiveByMac(m);
+            if (r == null || r.getId() == null) return null;
+            List<RemediationTask> tasks = taskMapper.selectByRecord(r.getId());
+            if (tasks.isEmpty()) return null;
+            for (RemediationTask t : tasks) {
+                if (!"DONE".equalsIgnoreCase(t.getStatus())) return null;
+            }
+            String cause = "修复任务全部完成";
+            // release 的 SQL 带 status='ACTIVE' 条件，多任务并发上报时仅一次生效
+            if (recordMapper.release(r.getId(), cause) > 0) {
+                redis.delete(IsolationProtocol.stateKey(m));
+                log.info("修复任务全部完成，自动迁回正常办公区: mac={} record={} 任务数={}",
+                        m, r.getId(), tasks.size());
+                return cause;
+            }
+        } catch (Exception e) {
+            log.warn("修复完成自动迁回失败: mac={} {}", m, e.getMessage());
+        }
+        return null;
+    }
+
     /** 终端隔离状态（Redis 优先，未命中回源 DB）。 */
     public Map<String, Object> state(String mac) {
         String m = IsolationProtocol.normalizeMac(mac);
