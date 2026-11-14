@@ -1,12 +1,15 @@
 package com.nac.radius.controller;
 
+import com.nac.common.isolation.IsolationProtocol;
 import com.nac.common.ratelimit.RateLimit;
 import com.nac.common.result.Result;
+import com.nac.common.software.SoftwareBaseline;
 import com.nac.radius.dto.IsolationEnterReq;
 import com.nac.radius.dto.RemediationReportReq;
 import com.nac.radius.entity.IsolationConfig;
 import com.nac.radius.entity.RemediationTask;
 import com.nac.radius.service.IsolationService;
+import com.nac.radius.service.SoftwareBaselineService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,9 +29,12 @@ import java.util.Map;
 public class ClientIsolationController {
 
     private final IsolationService isolationService;
+    private final SoftwareBaselineService softwareBaseline;
 
-    public ClientIsolationController(IsolationService isolationService) {
+    public ClientIsolationController(IsolationService isolationService,
+                                     SoftwareBaselineService softwareBaseline) {
         this.isolationService = isolationService;
+        this.softwareBaseline = softwareBaseline;
     }
 
     /** 当前隔离/修复区状态（含下发通道与修复门户地址）。 */
@@ -77,6 +83,13 @@ public class ClientIsolationController {
             out.put("message", "taskId/mac 不能为空");
             return Result.success(out);
         }
+        // 可选签名（与软件基线心跳同协议）：携带则校验，缺省兼容旧客户端
+        String signErr = verifyReportSign(req);
+        if (signErr != null) {
+            out.put("ok", false);
+            out.put("message", signErr);
+            return Result.success(out);
+        }
         boolean ok = isolationService.reportTask(req.getTaskId(), req.getMac(), req.getStatus(), req.getResultMsg());
         String released = null;
         if (ok && "DONE".equalsIgnoreCase(req.getStatus())) {
@@ -92,5 +105,25 @@ public class ClientIsolationController {
             out.put("message", ok ? "已更新" : "任务不存在或状态非法");
         }
         return Result.success(out);
+    }
+
+    /**
+     * 校验修复任务上报签名（可选）。
+     * payload = nonce|mac|ts|taskId|status，HMAC-SHA256 与软件基线心跳共用共享密钥。
+     *
+     * @return 校验失败原因；通过或未携带签名返回 null
+     */
+    private String verifyReportSign(RemediationReportReq req) {
+        String sig = req.getSignature();
+        if (sig == null || sig.isBlank()) return null;
+        String nonce = req.getNonce() == null ? "" : req.getNonce().trim();
+        if (nonce.length() < 16) return "签名 nonce 缺失或非法";
+        Long ts = req.getTs();
+        if (ts == null || Math.abs(System.currentTimeMillis() / 1000 - ts) > 300) return "签名时间戳超出允许窗口";
+        String status = req.getStatus() == null ? "" : req.getStatus().trim().toUpperCase();
+        String payload = nonce + "|" + SoftwareBaseline.normMac(req.getMac()) + "|" + ts + "|"
+                + req.getTaskId() + "|" + status;
+        if (!softwareBaseline.verifyApiSign(payload, sig)) return "签名校验失败";
+        return null;
     }
 }

@@ -208,6 +208,7 @@ public class RadiusAuthService {
 
         // 成功：清失败计数，构造 Accept + 授权属性
         clearFailures(username);
+        isolationService.releaseOnAuthSuccess(callingMac);
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
         accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
         addVlan(accept, effectiveVlan(user));
@@ -437,6 +438,7 @@ public class RadiusAuthService {
 
     private RadiusPacket tlsAccept(RadiusPacket request, RadiusUser user, String method) {
         clearFailures(user.getUsername());
+        isolationService.releaseOnAuthSuccess(request.getString(RadiusCodes.CALLING_STATION_ID));
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
         putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, request.getIdentifier(), null));
         accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());
@@ -557,6 +559,7 @@ public class RadiusAuthService {
     /** 统一构造 EAP 认证成功响应（EAP-Success + 会话超时 + VLAN 授权）。 */
     private RadiusPacket eapAccept(RadiusPacket request, RadiusUser user, int eapId, String method) {
         clearFailures(user.getUsername());
+        isolationService.releaseOnAuthSuccess(request.getString(RadiusCodes.CALLING_STATION_ID));
         RadiusPacket accept = new RadiusPacket(RadiusCodes.ACCESS_ACCEPT, request.getIdentifier(), null);
         putEap(accept, eapTypeOf(request), eapPacket(RadiusCodes.EAP_SUCCESS, eapId, null));
         accept.addInt(RadiusCodes.SESSION_TIMEOUT, props.getSessionTimeout());

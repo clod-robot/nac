@@ -310,6 +310,16 @@ public class SoftwareBaselineService {
         return !required.isEmpty() && allOnce(required) && onceCount(m, required) == required.size();
     }
 
+    /**
+     * 校验终端接口上报签名（协议同软件基线心跳：HMAC-SHA256(secret, payload)）。
+     * 共享密钥未配置时返回 true（此时软件基线本身无法生效，保持兼容）。
+     */
+    public boolean verifyApiSign(String payload, String signature) {
+        refreshConfig();
+        if (secret == null || secret.isBlank()) return true;
+        return SoftwareBaseline.verifySign(secret, payload, signature);
+    }
+
     // ---------------- ONCE 模式 ----------------
 
     private List<SoftwareBaseline.Policy> requiredPolicies() {

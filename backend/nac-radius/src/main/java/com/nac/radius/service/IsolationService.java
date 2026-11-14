@@ -257,6 +257,30 @@ public class IsolationService {
     }
 
     /**
+     * 认证通过（软件基线合规）后关闭残留隔离记录。
+     *
+     * <p>终端可能因客户端不再上报心跳导致 ACTIVE 记录滞留，管理端一直显示“隔离中”；
+     * 认证成功说明终端已恢复，记录只需置为 RELEASED 供追溯，不再影响网络。
+     * 仅 auto_release=1 时生效（0 表示由管理员人工释放）。</p>
+     */
+    public void releaseOnAuthSuccess(String mac) {
+        if (!autoRelease()) return;
+        String m = IsolationProtocol.normalizeMac(mac);
+        if (m.length() != 12) return;
+        try {
+            IsolationRecord r = recordMapper.selectActiveByMac(m);
+            if (r == null || r.getId() == null) return;
+            String cause = "认证通过，终端已合规";
+            if (recordMapper.release(r.getId(), cause) > 0) {
+                redis.delete(IsolationProtocol.stateKey(m));
+                log.info("认证通过自动清除残留隔离记录: mac={} record={}", m, r.getId());
+            }
+        } catch (Exception e) {
+            log.warn("认证通过清理隔离记录失败: mac={} {}", m, e.getMessage());
+        }
+    }
+
+    /**
      * 修复任务全部完成后立即迁回正常办公区（无需人工干预）。
      *
      * <p>与「合规心跳自动释放」互补：该终端本次隔离记录下的修复任务全部为 DONE
@@ -275,9 +299,19 @@ public class IsolationService {
             if (r == null || r.getId() == null) return null;
             List<RemediationTask> tasks = taskMapper.selectByRecord(r.getId());
             if (tasks.isEmpty()) return null;
+            int done = 0;
             for (RemediationTask t : tasks) {
-                if (!"DONE".equalsIgnoreCase(t.getStatus())) return null;
+                String st = t.getStatus() == null ? "" : t.getStatus();
+                // CANCELLED：被同规则新任务取代的旧任务，不参与判定
+                if ("CANCELLED".equalsIgnoreCase(st)) continue;
+                if ("DONE".equalsIgnoreCase(st)) {
+                    done++;
+                    continue;
+                }
+                return null;
             }
+            // 全部任务均被取消（无实际完成的修复动作）不释放
+            if (done == 0) return null;
             String cause = "修复任务全部完成";
             // release 的 SQL 带 status='ACTIVE' 条件，多任务并发上报时仅一次生效
             if (recordMapper.release(r.getId(), cause) > 0) {
@@ -345,9 +379,14 @@ public class IsolationService {
 
     // ---------------- 修复任务 ----------------
 
+    /** 当前 ACTIVE 隔离记录下的修复任务（已释放的历史任务不再下发，避免客户端重复执行）。 */
     public List<RemediationTask> tasks(String mac) {
+        String m = IsolationProtocol.normalizeMac(mac);
+        if (m.length() != 12) return List.of();
         try {
-            return taskMapper.selectByMac(IsolationProtocol.normalizeMac(mac));
+            IsolationRecord r = recordMapper.selectActiveByMac(m);
+            if (r == null || r.getId() == null) return List.of();
+            return taskMapper.selectByRecord(r.getId());
         } catch (Exception e) {
             log.warn("查询修复任务失败: {}", e.getMessage());
             return List.of();
@@ -382,7 +421,7 @@ public class IsolationService {
         }
     }
 
-    /** 按规则生成修复任务（与补丁库/病毒库联动，幂等）。 */
+    /** 按规则生成修复任务（与补丁库/病毒库联动：同规则在途任务不重复生成，失败任务被新任务取代）。 */
     public int createTasks(IsolationRecord record, List<String> missing) {
         if (record == null || record.getId() == null) return 0;
         try {
@@ -393,9 +432,11 @@ public class IsolationService {
                 if (!matches(r, missing)) continue;
                 RemediationTask t = build(record, r);
                 if (t == null) continue;
-                boolean dup = exists.stream().anyMatch(e -> r.getId() != null && r.getId().equals(e.getRuleId())
-                        && !"DONE".equalsIgnoreCase(e.getStatus()) && !"FAILED".equalsIgnoreCase(e.getStatus()));
-                if (dup) continue;
+                boolean inFlight = exists.stream().anyMatch(e -> r.getId() != null && r.getId().equals(e.getRuleId())
+                        && ("PENDING".equalsIgnoreCase(e.getStatus()) || "RUNNING".equalsIgnoreCase(e.getStatus())));
+                if (inFlight) continue;
+                // 旧任务（FAILED 等）标记为 CANCELLED，防止历史失败永久阻塞“全部完成”判定
+                taskMapper.cancelUnfinishedByRule(record.getId(), r.getId(), "已被新任务取代");
                 taskMapper.insert(t);
                 exists.add(t);
                 created++;

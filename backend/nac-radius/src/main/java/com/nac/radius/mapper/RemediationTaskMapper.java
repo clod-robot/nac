@@ -31,9 +31,18 @@ public interface RemediationTaskMapper {
     int updateStatus(@Param("id") Long id, @Param("mac") String mac,
                      @Param("status") String status, @Param("resultMsg") String resultMsg);
 
-    @Select("SELECT COUNT(1) FROM sys_remediation_task WHERE record_id = #{recordId} AND status NOT IN ('DONE','FAILED')")
+    @Select("SELECT COUNT(1) FROM sys_remediation_task WHERE record_id = #{recordId} AND status NOT IN ('DONE','FAILED','CANCELLED')")
     int countUnfinished(@Param("recordId") Long recordId);
 
     @Select("SELECT COUNT(1) FROM sys_remediation_task WHERE record_id = #{recordId} AND status = 'FAILED'")
     int countFailed(@Param("recordId") Long recordId);
+
+    /**
+     * 取消同一规则下未成功的旧任务（PENDING/RUNNING/FAILED），由新任务取代。
+     * 避免历史 FAILED 任务永久阻塞「修复任务全部完成」判定，同时保证同一规则只有一条在途任务。
+     */
+    @Update("UPDATE sys_remediation_task SET status = 'CANCELLED', result_msg = #{resultMsg}, finish_time = NOW() " +
+            "WHERE record_id = #{recordId} AND rule_id = #{ruleId} AND status IN ('PENDING','RUNNING','FAILED')")
+    int cancelUnfinishedByRule(@Param("recordId") Long recordId, @Param("ruleId") Long ruleId,
+                               @Param("resultMsg") String resultMsg);
 }

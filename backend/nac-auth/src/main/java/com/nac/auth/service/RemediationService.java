@@ -97,7 +97,7 @@ public class RemediationService {
     public int unfinished(Long recordId) { return taskMapper.countUnfinished(recordId); }
 
     /**
-     * 按启用规则生成修复任务（幂等：同一记录下同类同目标的未完成任务不重复创建）。
+     * 按启用规则生成修复任务（同规则在途任务不重复生成，失败任务被新任务取代）。
      *
      * @param record  隔离记录
      * @param missing 缺失项显示名（软件名/补丁名/病毒库名）
@@ -111,9 +111,11 @@ public class RemediationService {
             if (!matches(r, missing)) continue;
             RemediationTask t = build(record, r);
             if (t == null) continue;
-            boolean dup = exists.stream().anyMatch(e -> r.getId() != null && r.getId().equals(e.getRuleId())
-                    && !"DONE".equalsIgnoreCase(e.getStatus()) && !"FAILED".equalsIgnoreCase(e.getStatus()));
-            if (dup) continue;
+            boolean inFlight = exists.stream().anyMatch(e -> r.getId() != null && r.getId().equals(e.getRuleId())
+                    && ("PENDING".equalsIgnoreCase(e.getStatus()) || "RUNNING".equalsIgnoreCase(e.getStatus())));
+            if (inFlight) continue;
+            // 旧任务（FAILED 等）标记为 CANCELLED，防止历史失败永久阻塞“全部完成”判定
+            taskMapper.cancelUnfinishedByRule(record.getId(), r.getId(), "已被新任务取代");
             taskMapper.insert(t);
             exists.add(t);
             created++;
